@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Stores application settings like electricity tariff
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+/// Each row represents one electricity meter reading
+model MeterReading {
+  id            String   @id @default(uuid())
+  recordedAt    DateTime              // Date + Time when reading was taken
+  meterKwh      Float                 // Current meter reading in kWh
+  buyKwh        Float?                // Optional: kWh tokens purchased
+  hourDiff      Float?                // Calculated: hours since previous reading
+  kwhUsed       Float?                // Calculated: kWh consumed since previous reading
+  costRp        Float?                // Calculated: cost in Rupiah
+  tariffAtEntry Float?                // Snapshot of tariff at time of entry
+  notes         String?               // Optional notes (1-10 words)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([recordedAt])
+  @@map("meter_readings")
+}
