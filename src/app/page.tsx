@@ -1,65 +1,186 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useSession } from "next-auth/react";
+import { useState, useEffect, useCallback } from "react";
+import Header from "@/components/Header";
+import SummaryCards from "@/components/SummaryCards";
+import DataEntryForm from "@/components/DataEntryForm";
+import ReadingsTable from "@/components/ReadingsTable";
+import UsageChart from "@/components/UsageChart";
+import MasterDataPanel from "@/components/MasterDataPanel";
+import ImportDataModal from "@/components/ImportDataModal";
+import MonthlyReport from "@/components/MonthlyReport";
+
+interface MeterReading {
+  id: string;
+  recordedAt: string;
+  meterKwh: number;
+  buyKwh: number | null;
+  hourDiff: number | null;
+  kwhUsed: number | null;
+  costRp: number | null;
+  tariffAtEntry: number | null;
+  notes: string | null;
+}
+
+interface SummaryData {
+  todayKwh: number;
+  todayCost: number;
+  weekKwh: number;
+  weekCost: number;
+  monthKwh: number;
+  monthCost: number;
+  lastMonthKwh: number;
+  lastMonthCost: number;
+}
+
+function calculateSummary(readings: MeterReading[]): SummaryData {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekAgo = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const summary: SummaryData = {
+    todayKwh: 0,
+    todayCost: 0,
+    weekKwh: 0,
+    weekCost: 0,
+    monthKwh: 0,
+    monthCost: 0,
+    lastMonthKwh: 0,
+    lastMonthCost: 0,
+  };
+
+  readings.forEach((r) => {
+    if (r.kwhUsed == null || r.costRp == null) return;
+    // Parse the ISO string and get local date for comparison
+    const date = new Date(r.recordedAt);
+
+    // Today: reading's local date is today
+    if (date >= todayStart) {
+      summary.todayKwh += r.kwhUsed;
+      summary.todayCost += r.costRp;
+    }
+
+    // This week
+    if (date >= weekAgo) {
+      summary.weekKwh += r.kwhUsed;
+      summary.weekCost += r.costRp;
+    }
+
+    // This month
+    if (date >= monthStart) {
+      summary.monthKwh += r.kwhUsed;
+      summary.monthCost += r.costRp;
+    }
+
+    // Last month: from start of last month up to (but not including) start of this month
+    if (date >= lastMonthStart && date < thisMonthStart) {
+      summary.lastMonthKwh += r.kwhUsed;
+      summary.lastMonthCost += r.costRp;
+    }
+  });
+
+  return summary;
+}
+
+export default function HomePage() {
+  const { data: session } = useSession();
+  const isAdmin = !!(session?.user);
+  const [readings, setReadings] = useState<MeterReading[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showImport, setShowImport] = useState(false);
+
+  const fetchReadings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/readings?limit=1000");
+      const data = await res.json();
+      setReadings(data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch readings:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReadings();
+  }, [fetchReadings]);
+
+  const summary = calculateSummary(readings);
+
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="spinner mx-auto mb-4" style={{ width: "2rem", height: "2rem" }} />
+              <p className="text-text-secondary">Loading data...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <>
+      <Header />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Summary Cards */}
+        <SummaryCards data={summary} />
+
+        {/* Charts */}
+        <UsageChart readings={readings} />
+
+        {/* Admin section: Data Entry + Import */}
+        {isAdmin && (
+          <div className="space-y-4">
+            <DataEntryForm onSuccess={fetchReadings} />
+
+            <div className="flex gap-3">
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => setShowImport(true)}
+              >
+                📥 Import CSV Data
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Readings Table */}
+        <ReadingsTable
+          readings={readings}
+          isAdmin={isAdmin}
+          onRefresh={fetchReadings}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        {/* Monthly Report */}
+        <MonthlyReport readings={readings} />
+
+        {/* Master Data Settings */}
+        <MasterDataPanel isAdmin={isAdmin} />
+
+        {/* Footer */}
+        <footer className="text-center py-6 text-xs text-text-muted">
+          <p>⚡ Electricity Tracker — Built with Next.js &amp; PostgreSQL</p>
+        </footer>
       </main>
-    </div>
+
+      {/* Import Modal */}
+      <ImportDataModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onSuccess={() => {
+          fetchReadings();
+          setShowImport(false);
+        }}
+      />
+    </>
   );
 }
