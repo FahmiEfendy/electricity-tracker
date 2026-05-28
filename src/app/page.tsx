@@ -147,7 +147,7 @@ export default function HomePage() {
                 className="btn-secondary text-sm"
                 onClick={() => setShowImport(true)}
               >
-                📥 Import CSV Data
+                📥 Import Spreadsheet Data
               </button>
             </div>
           </div>

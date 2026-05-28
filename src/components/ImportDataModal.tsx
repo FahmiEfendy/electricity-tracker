@@ -2,6 +2,8 @@
 
 import { useState, useRef } from "react";
 
+import * as XLSX from "xlsx";
+
 interface ImportDataModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -27,11 +29,29 @@ export default function ImportDataModal({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setCsvText(event.target?.result as string);
-    };
-    reader.readAsText(file);
+    if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const csv = XLSX.utils.sheet_to_csv(worksheet, { dateNF: "yyyy-mm-dd" });
+          setCsvText(csv);
+        } catch (err) {
+          console.error("Error parsing Excel file", err);
+          alert("Failed to parse Excel file.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCsvText(event.target?.result as string);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleImport = async () => {
@@ -113,7 +133,7 @@ export default function ImportDataModal({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.xlsx,.xls"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -121,7 +141,7 @@ export default function ImportDataModal({
             className="btn-secondary w-full"
             onClick={() => fileInputRef.current?.click()}
           >
-            📁 Choose CSV File
+            📁 Choose CSV or Excel File
           </button>
         </div>
 
