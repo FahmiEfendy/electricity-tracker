@@ -1,0 +1,35 @@
+# Version control
+.git
+.github
+.gitignore
+
+# Docker
+docker-compose.yml
+Dockerfile
+
+# Documentation
+docs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS & Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Next.js
+.next/
+out/
+
+# Node
+node_modules/
+
+# Misc
+*.md
+!README.md
+nginx.conf
