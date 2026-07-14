@@ -60,7 +60,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       const diffMs =
         recordedDate.getTime() - previousReading.recordedAt.getTime();
       hourDiff = diffMs / (1000 * 60 * 60);
-      kwhUsed = meterKwh - previousReading.meterKwh;
+      kwhUsed = (previousReading.meterKwh + (buyKwh || 0)) - meterKwh;
 
       if (tariff !== null) {
         costRp = kwhUsed * tariff;

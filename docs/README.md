@@ -2,7 +2,7 @@
 
 ## Overview
 
-Next.js 16 full-stack application for tracking household electricity consumption. Features meter reading input, cost calculation based on configurable tariffs, historical data visualization with charts, and Excel import/export. Authentication is handled via NextAuth with credential-based admin login.
+Next.js 16 full-stack application for tracking household **prepaid electricity meter** consumption. Features meter reading input, cost calculation based on configurable tariffs, historical data visualization with charts, and CSV/Excel import. Authentication is handled via NextAuth with credential-based admin login.
 
 **Container name:** `et-app`
 **Image:** `ghcr.io/fahmiefendy/electricity-tracker:latest`
@@ -18,7 +18,7 @@ Browser → Cloudflare → infra-nginx → et-app:3000 (Next.js standalone)
                                        ├── /api/auth/*  → NextAuth endpoints
                                        ├── /api/readings/* → Meter reading CRUD
                                        ├── /api/settings/* → Tariff settings
-                                       └── /api/import/*   → Excel import
+                                       └── /api/import/*   → CSV/Excel import
                                                           ↓
                                                     db-postgres:5432
 ```
@@ -29,23 +29,35 @@ Browser → Cloudflare → infra-nginx → et-app:3000 (Next.js standalone)
 app/
 ├── src/
 │   ├── app/                  # Next.js App Router pages & API routes
-│   │   ├── page.tsx          # Dashboard (meter readings, charts)
+│   │   ├── page.tsx          # Dashboard (meter readings, charts, summary)
 │   │   ├── login/            # Login page
 │   │   ├── api/
 │   │   │   ├── auth/         # NextAuth credential provider
 │   │   │   ├── readings/     # Meter reading CRUD endpoints
 │   │   │   ├── settings/     # Tariff configuration endpoints
-│   │   │   └── import/       # Excel import endpoint
+│   │   │   └── import/       # CSV/Excel import endpoint
 │   │   ├── layout.tsx        # Root layout
 │   │   └── globals.css       # Tailwind CSS v4 styles
 │   ├── auth.ts               # NextAuth configuration
 │   ├── auth.config.ts        # Auth provider config
 │   ├── middleware.ts          # NextAuth middleware (route protection)
 │   ├── components/           # React components
-│   └── lib/                  # Utilities (Prisma client, helpers)
+│   │   ├── Header.tsx        # Sticky topbar with profile dropdown
+│   │   ├── DataEntryForm.tsx # New reading form with "Now" time button
+│   │   ├── ReadingsTable.tsx # Paginated readings table with month filter
+│   │   ├── MonthlyReport.tsx # Monthly summary (entries/days, avg, totals)
+│   │   ├── UsageChart.tsx    # Daily/monthly bar & line charts
+│   │   ├── SummaryCards.tsx  # Today / week / month / last month cards
+│   │   ├── MasterDataPanel.tsx # Tariff settings panel
+│   │   └── ImportDataModal.tsx # CSV import modal
+│   └── lib/                  # Utilities
+│       ├── prisma.ts         # Prisma client singleton (pg adapter)
+│       ├── recalculate.ts    # Derived field recalculation helper
+│       └── utils.ts          # Formatting helpers (Rupiah, kWh, dates)
 ├── prisma/
 │   ├── schema.prisma         # Database schema (Settings, MeterReading)
-│   ├── seed.ts               # Database seeder (admin user, default tariff)
+│   ├── seed.ts               # Database seeder (default tariff)
+│   ├── recalculate-all.ts    # One-off script to repair all historical records
 │   └── migrations/           # Prisma migration files
 ├── public/                   # Static assets
 ├── Dockerfile                # Multi-stage build (Node.js 22 Alpine → standalone)
@@ -54,6 +66,21 @@ app/
 └── .github/workflows/
     └── deploy.yml            # CI/CD — build & push to GHCR
 ```
+
+## Key Business Logic
+
+### Prepaid Meter Calculation
+This app tracks a **prepaid electricity meter** where the balance decreases as electricity is consumed and increases when tokens (kWh) are purchased. The formula used is:
+
+```
+kwhUsed = (previousMeter + buyKwh) - currentMeter
+costRp  = kwhUsed × tariff_per_kwh
+```
+
+> ⚠️ This is the **opposite** of a postpaid meter. Do not change this formula to `current - previous`.
+
+### Latest Reading Suppression
+The chronologically newest reading has its `kwhUsed`, `costRp`, and `hourDiff` hidden on the frontend (set to `null` in `fetchReadings`) because no subsequent reading exists to calculate them against. The raw values are preserved in the database unchanged.
 
 ## Environment Variables
 
@@ -82,21 +109,21 @@ app/
 ### Meter Readings
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `GET` | `/api/readings` | List all readings (paginated) | Yes |
+| `GET` | `/api/readings` | List readings (supports `limit`, `offset`, `month`, `year`) | No |
 | `POST` | `/api/readings` | Create a new meter reading | Yes |
-| `PATCH` | `/api/readings/:id` | Update a reading | Yes |
-| `DELETE` | `/api/readings/:id` | Delete a reading | Yes |
+| `PUT` | `/api/readings/:id` | Update a reading (recalculates next reading too) | Yes |
+| `DELETE` | `/api/readings/:id` | Delete a reading (recalculates next reading too) | Yes |
 
 ### Settings
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `GET` | `/api/settings` | Get current tariff settings | Yes |
-| `PUT` | `/api/settings` | Update tariff settings | Yes |
+| `GET` | `/api/settings` | Get current tariff | No |
+| `PUT` | `/api/settings` | Update tariff | Yes |
 
 ### Import
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `POST` | `/api/import` | Import readings from Excel file | Yes |
+| `POST` | `/api/import` | Import readings from CSV/Excel | Yes |
 
 ## Local Development
 
@@ -110,11 +137,17 @@ cp .env.example .env
 # Run database migrations
 npm run db:migrate
 
-# Seed the database (creates admin user and default tariff)
+# Seed the database (default tariff Rp 1791.3/kWh)
 npm run db:seed
 
 # Start development server (hot reload on port 3000)
 npm run dev
+```
+
+### Repair Historical Data
+If calculation formulas are changed, recalculate all historical records:
+```bash
+npx tsx prisma/recalculate-all.ts
 ```
 
 ## Docker Deployment
@@ -142,6 +175,18 @@ Uses PostgreSQL (`db-postgres`) from the shared `databases/` stack via the `prox
 | `Setting` | `settings` | Key-value store for tariff configuration |
 | `MeterReading` | `meter_readings` | Individual meter readings with calculated cost |
 
+### MeterReading Fields
+| Field | Type | Description |
+|-------|------|-------------|
+| `recordedAt` | DateTime | When the reading was taken |
+| `meterKwh` | Float | Current meter balance in kWh |
+| `buyKwh` | Float? | Token purchased at this reading (optional) |
+| `hourDiff` | Float? | Hours since previous reading (calculated) |
+| `kwhUsed` | Float? | kWh consumed since previous reading (calculated) |
+| `costRp` | Float? | Cost in Rupiah (calculated) |
+| `tariffAtEntry` | Float? | Tariff snapshot at time of entry |
+| `notes` | String? | Optional notes |
+
 ## Troubleshooting
 
 | Issue | Solution |
@@ -151,7 +196,8 @@ Uses PostgreSQL (`db-postgres`) from the shared `databases/` stack via the `prox
 | Auth errors / redirect loops | Verify `AUTH_SECRET` is set and `AUTH_TRUST_HOST=true` (required behind reverse proxy) |
 | 502 from nginx | Check container is running: `docker ps --filter name=et-app` |
 | Blank page after deploy | Check `docker logs et-app` for Next.js startup errors |
-| Excel import fails | Verify file format matches expected columns and file size is within limits |
+| Import fails | Verify CSV columns match: `Date, kWh, Time, Hour Difference, Buy kWh, kWh Used, Cost (Rp), Notes` |
+| Negative kWh values after edit | Run `npx tsx prisma/recalculate-all.ts` to repair all derived fields |
 
 ## Related Files
 

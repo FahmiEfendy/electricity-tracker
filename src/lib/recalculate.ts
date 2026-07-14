@@ -28,7 +28,7 @@ export async function recalculateDerivedFields(readingId: string) {
     const diffMs =
       reading.recordedAt.getTime() - previousReading.recordedAt.getTime();
     hourDiff = diffMs / (1000 * 60 * 60);
-    kwhUsed = reading.meterKwh - previousReading.meterKwh;
+    kwhUsed = (previousReading.meterKwh + (reading.buyKwh || 0)) - reading.meterKwh;
 
     if (tariff !== null) {
       costRp = kwhUsed * tariff;

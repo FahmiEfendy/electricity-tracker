@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -57,11 +57,22 @@ function CustomTooltip({
 
 export default function UsageChart({ readings }: UsageChartProps) {
   const [view, setView] = useState<ChartView>("daily");
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Prepare daily data (last 30 entries)
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Prepare daily data (last 12 on mobile, 30 on desktop)
+  const displayCount = isMobile ? 12 : 30;
   const dailyData = readings
     .filter((r) => r.kwhUsed != null)
-    .slice(0, 30)
+    .slice(0, displayCount)
     .reverse()
     .map((r) => {
       const date = new Date(r.recordedAt);
@@ -138,7 +149,7 @@ export default function UsageChart({ readings }: UsageChartProps) {
         {view === "daily" ? (
           dailyData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+              <BarChart data={dailyData} margin={{ top: 5, right: 5, bottom: 5, left: -25 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
                 <XAxis
                   dataKey="date"
@@ -151,6 +162,7 @@ export default function UsageChart({ readings }: UsageChartProps) {
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
+                  width={30}
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend
@@ -178,7 +190,7 @@ export default function UsageChart({ readings }: UsageChartProps) {
           )
         ) : monthlyData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={monthlyData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+            <LineChart data={monthlyData} margin={{ top: 5, right: -5, bottom: 5, left: -25 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
               <XAxis
                 dataKey="name"
@@ -192,6 +204,7 @@ export default function UsageChart({ readings }: UsageChartProps) {
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
+                width={30}
               />
               <YAxis
                 yAxisId="cost"
@@ -200,6 +213,7 @@ export default function UsageChart({ readings }: UsageChartProps) {
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
+                width={50}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: "12px", color: "#94a3b8" }} />

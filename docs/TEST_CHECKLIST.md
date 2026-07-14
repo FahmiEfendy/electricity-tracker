@@ -57,7 +57,7 @@ Run through this checklist after every deployment or significant code change.
 
 - [ ] **Login with valid admin credentials**
   Enter the `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env`
-  **Expected:** Redirected to dashboard, session cookie set
+  **Expected:** Redirected to dashboard; header shows Admin badge, email, and profile circle
 
 - [ ] **Reject invalid credentials**
   Enter wrong email or password
@@ -67,9 +67,17 @@ Run through this checklist after every deployment or significant code change.
   Open `http://electricity.fahmiefendy.dev/` without being logged in
   **Expected:** Redirected to `/login`
 
-- [ ] **Logout works**
-  Click logout / sign out
+- [ ] **Profile dropdown works**
+  Click the profile circle avatar in the top-right corner
+  **Expected:** Dropdown shows "Import Spreadsheet Data" and "Logout" options
+
+- [ ] **Logout from dropdown**
+  Click profile circle → Logout
   **Expected:** Session cleared, redirected to login
+
+- [ ] **Click-outside closes dropdown**
+  Open dropdown, then click anywhere else on the page
+  **Expected:** Dropdown closes without navigating away
 
 - [ ] **Session persists on refresh**
   After login, refresh the page
@@ -83,55 +91,88 @@ Run through this checklist after every deployment or significant code change.
   Navigate to dashboard after login
   **Expected:** Table of meter readings shown (or empty state if no data)
 
+- [ ] **Latest reading hides derived fields**
+  Check the most recent (top) entry in the readings table
+  **Expected:** kWh Used, Cost, and Hour Diff show "—" (not a calculated value)
+
 - [ ] **Create a new reading**
   Add a new meter reading with kWh value and optional notes
-  **Expected:** Reading created, appears in the table with calculated fields
+  **Expected:** Reading created; the *previous* latest reading now shows calculated fields correctly
 
-- [ ] **Calculations are correct**
-  Create two readings with known values
+- [ ] **"🕒 Now" button works on new reading form**
+  Click the "Now" button next to the Date & Time field
+  **Expected:** The datetime-local input updates to current local date and time
+
+- [ ] **Calculations use prepaid formula**
+  Create two readings with known values (e.g. prev=50.0, current=35.0, no token)
   **Expected:**
-  - `hourDiff` = time difference between readings in hours
-  - `kwhUsed` = difference in meter kWh between readings
-  - `costRp` = kwhUsed × current tariff
+  - `kwhUsed` = `50.0 - 35.0` = **15.0**
+  - `costRp` = `15.0 × tariff`
+
+- [ ] **Token purchase included in calculation**
+  Create a reading where `buyKwh` is set (e.g. prev=10.0, token=100.0, current=95.0)
+  **Expected:**
+  - `kwhUsed` = `(10.0 + 100.0) - 95.0` = **15.0**
 
 - [ ] **Update a reading**
-  Edit an existing meter reading
-  **Expected:** Changes saved, table updated
+  Click ✏️, change a value, click Save
+  **Expected:** Reading updates; the subsequent reading's derived fields are recalculated correctly (not negative)
+
+- [ ] **"🕒 Now" button works on edit form**
+  Click ✏️ on an existing reading, then click the "Now" button
+  **Expected:** The datetime-local input updates to the current time
 
 - [ ] **Delete a reading**
-  Delete a meter reading and confirm
-  **Expected:** Reading removed from table
+  Click 🗑️ → Confirm
+  **Expected:** Reading removed; the reading after the deleted one recalculates correctly
 
 ---
 
 ## 5. Settings
 
 - [ ] **View current tariff**
-  Navigate to settings (or check via API)
-  ```bash
-  curl -s http://electricity.fahmiefendy.dev/api/settings -H "Cookie: <session_cookie>" | jq .
-  ```
-  **Expected:** Returns current tariff value
+  Navigate to Master Data Settings at the bottom of the dashboard
+  **Expected:** Current tariff shown in Rupiah/kWh
 
 - [ ] **Update tariff**
-  Change the electricity tariff value
-  **Expected:** New tariff saved, future cost calculations use the new rate
+  Change the electricity tariff value and save
+  **Expected:** New tariff saved; new readings use the updated rate
 
 ---
 
 ## 6. Data Import
 
-- [ ] **Import from Excel**
-  Upload an Excel file with meter reading data
-  **Expected:** Readings imported, appear in the dashboard table
+- [ ] **Import from profile dropdown**
+  Click profile circle → Import Spreadsheet Data
+  **Expected:** Import modal opens
 
-- [ ] **Reject invalid file format**
-  Upload a non-Excel file or Excel with wrong columns
+- [ ] **Import valid CSV**
+  Upload a CSV with columns: `Date, kWh, Time, Hour Difference, Buy kWh, kWh Used, Cost (Rp), Notes`
+  **Expected:** Readings imported, appear in the dashboard table with correct positive values
+
+- [ ] **Reject invalid format**
+  Upload a non-CSV file or CSV with wrong columns
   **Expected:** Error message shown, no data imported
 
 ---
 
-## 7. Charts & Visualization
+## 7. Monthly Report
+
+- [ ] **Monthly report renders**
+  View the Monthly Report section with multiple months of data
+  **Expected:** Table shows columns: Month | Entries | Avg kWh/Day | Total kWh | Avg Cost/Day | Total Cost
+
+- [ ] **Entries format shows progress**
+  Check the Entries column for a complete month
+  **Expected:** Displays as `28/28` (February) or `31/31` (March), not just a raw count
+
+- [ ] **Partial month shows correct total days**
+  Check the current month (in progress)
+  **Expected:** Displays as e.g. `14/31` where 31 is the actual number of days in the month
+
+---
+
+## 8. Charts & Visualization
 
 - [ ] **Charts render with data**
   View the dashboard with multiple readings
@@ -143,7 +184,7 @@ Run through this checklist after every deployment or significant code change.
 
 ---
 
-## 8. Error Handling
+## 9. Error Handling
 
 - [ ] **API returns proper error codes**
   ```bash
@@ -153,11 +194,11 @@ Run through this checklist after every deployment or significant code change.
 
 - [ ] **Invalid reading data returns validation error**
   Submit a reading with missing required fields
-  **Expected:** `400` or `422` with error message
+  **Expected:** `400` with error message
 
 ---
 
-## 9. Rollback
+## 10. Rollback
 
 - [ ] **Previous image can be restored**
   ```bash
@@ -166,3 +207,10 @@ Run through this checklist after every deployment or significant code change.
   docker logs et-app --tail 10
   ```
   **Expected:** Container starts with previous version, app loads correctly
+
+- [ ] **Historical data recalculation works**
+  If formula changes are deployed, run:
+  ```bash
+  npx tsx prisma/recalculate-all.ts
+  ```
+  **Expected:** Script completes without errors, all kWh values are positive

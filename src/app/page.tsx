@@ -40,7 +40,6 @@ function calculateSummary(readings: MeterReading[]): SummaryData {
   const weekAgo = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const summary: SummaryData = {
     todayKwh: 0,
@@ -77,7 +76,7 @@ function calculateSummary(readings: MeterReading[]): SummaryData {
     }
 
     // Last month: from start of last month up to (but not including) start of this month
-    if (date >= lastMonthStart && date < thisMonthStart) {
+    if (date >= lastMonthStart && date < monthStart) {
       summary.lastMonthKwh += r.kwhUsed;
       summary.lastMonthCost += r.costRp;
     }
@@ -97,7 +96,31 @@ export default function HomePage() {
     try {
       const res = await fetch("/api/readings?limit=1000");
       const data = await res.json();
-      setReadings(data.data || []);
+      const rawReadings: MeterReading[] = data.data || [];
+
+      // Find the reading with the latest recordedAt timestamp
+      let latestReading: MeterReading | null = null;
+      for (const r of rawReadings) {
+        if (!latestReading || new Date(r.recordedAt) > new Date(latestReading.recordedAt)) {
+          latestReading = r;
+        }
+      }
+
+      // Hide derived fields (hourDiff, kwhUsed, costRp) for the latest reading
+      // as they require a subsequent reading to be calculated correctly.
+      const processedReadings = rawReadings.map((r) => {
+        if (latestReading && r.id === latestReading.id) {
+          return {
+            ...r,
+            hourDiff: null,
+            kwhUsed: null,
+            costRp: null,
+          };
+        }
+        return r;
+      });
+
+      setReadings(processedReadings);
     } catch (err) {
       console.error("Failed to fetch readings:", err);
     } finally {
@@ -114,7 +137,7 @@ export default function HomePage() {
   if (loading) {
     return (
       <>
-        <Header />
+        <Header onShowImport={() => setShowImport(true)} />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -129,7 +152,7 @@ export default function HomePage() {
 
   return (
     <>
-      <Header />
+      <Header onShowImport={() => setShowImport(true)} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Summary Cards */}
         <SummaryCards data={summary} />
@@ -137,20 +160,9 @@ export default function HomePage() {
         {/* Charts */}
         <UsageChart readings={readings} />
 
-        {/* Admin section: Data Entry + Import */}
+        {/* Admin section: Data Entry */}
         {isAdmin && (
-          <div className="space-y-4">
-            <DataEntryForm onSuccess={fetchReadings} />
-
-            <div className="flex gap-3">
-              <button
-                className="btn-secondary text-sm"
-                onClick={() => setShowImport(true)}
-              >
-                📥 Import Spreadsheet Data
-              </button>
-            </div>
-          </div>
+          <DataEntryForm onSuccess={fetchReadings} />
         )}
 
         {/* Readings Table */}
@@ -168,7 +180,7 @@ export default function HomePage() {
 
         {/* Footer */}
         <footer className="text-center py-6 text-xs text-text-muted">
-          <p>⚡ Electricity Tracker — Built with Next.js &amp; PostgreSQL</p>
+          <p>⚡ Electricity Tracker — Built with Next.js</p>
         </footer>
       </main>
 

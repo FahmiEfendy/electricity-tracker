@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // Parse CSV fields — handle potential commas inside quotes
-        const fields = parseCSVLine(line);
+        const fields = mergeUnquotedDatePrefix(parseCSVLine(line));
 
         if (fields.length < 3) {
           errors.push(`Row ${rowNum}: insufficient columns (${fields.length})`);
@@ -68,8 +68,9 @@ export async function POST(request: NextRequest) {
           hourDiffStr, // Hour Difference
           buyKwhStr,   // Buy kWh
           kwhUsedStr,  // kWh Used
-          costRpStr,   // Cost (Rp)
-          ...notesParts // Notes (may contain commas if not quoted)
+          ,            // Cost (Rp) — ignored; always recalculated below
+          notesStr,    // Notes
+          // any further columns (e.g. sheet helper columns) are ignored
         ] = fields;
 
         // Parse date and time into a single DateTime
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const meterKwh = parseFloat(kwhStr);
+        const meterKwh = parseLocaleFloat(kwhStr);
         if (isNaN(meterKwh)) {
           errors.push(`Row ${rowNum}: invalid kWh value "${kwhStr}"`);
           continue;
@@ -88,8 +89,11 @@ export async function POST(request: NextRequest) {
         const hourDiff = parseFloatOrNull(hourDiffStr);
         const buyKwh = parseFloatOrNull(buyKwhStr);
         const kwhUsed = parseFloatOrNull(kwhUsedStr);
-        const costRp = parseFloatOrNull(costRpStr);
-        const notes = notesParts.filter((p) => p.trim() !== "").join(",").trim() || null;
+        // Cost is always derived from kWh used and tariff, not trusted from the
+        // CSV — spreadsheet formula cells can export stale/blank cached values.
+        const costRp =
+          kwhUsed !== null && tariff !== null ? kwhUsed * tariff : null;
+        const notes = notesStr?.trim() || null;
 
         await prisma.meterReading.create({
           data: {
@@ -158,6 +162,19 @@ function parseCSVLine(line: string): string[] {
   }
 
   fields.push(current.trim());
+  return fields;
+}
+
+/**
+ * If the date's day-of-week prefix (e.g. "Sel", "Rab") was written unquoted
+ * with a comma before the actual date (e.g. "Sel", "29 Jul 2025" as two
+ * separate fields), merge them back into a single date field. Detected by
+ * the first field containing no digits at all.
+ */
+function mergeUnquotedDatePrefix(fields: string[]): string[] {
+  if (fields.length > 1 && /^[A-Za-z]{2,3},?$/.test(fields[0])) {
+    return [`${fields[0]} ${fields[1]}`, ...fields.slice(2)];
+  }
   return fields;
 }
 
@@ -247,10 +264,24 @@ function parseDateAndTime(dateStr: string, timeStr: string): Date | null {
 }
 
 /**
+ * Parse a numeric string that may use Indonesian/European locale formatting,
+ * e.g. "106,62" (comma decimal) or "Rp23.947,83" (dot thousands, comma decimal,
+ * currency prefix). Falls back to plain "." decimal parsing (e.g. "106.62").
+ */
+function parseLocaleFloat(value: string): number {
+  const cleaned = value.replace(/[^0-9.,-]/g, "");
+  if (cleaned.includes(",")) {
+    // Comma is the decimal separator; dots (if any) are thousands separators.
+    return parseFloat(cleaned.replace(/\./g, "").replace(",", "."));
+  }
+  return parseFloat(cleaned);
+}
+
+/**
  * Parse a string to float, returning null for empty or invalid values.
  */
 function parseFloatOrNull(value: string | undefined): number | null {
   if (!value || value.trim() === "" || value.trim() === "-") return null;
-  const num = parseFloat(value.trim());
+  const num = parseLocaleFloat(value.trim());
   return isNaN(num) ? null : num;
 }

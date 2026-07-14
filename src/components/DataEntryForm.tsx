@@ -7,13 +7,15 @@ interface DataEntryFormProps {
 }
 
 export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
-  const now = new Date();
-  const localISO = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
+  const getLocalISO = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+  };
 
   const [formData, setFormData] = useState({
-    recordedAt: localISO,
+    recordedAt: getLocalISO(),
     meterKwh: "",
     buyKwh: "",
     notes: "",
@@ -21,6 +23,10 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const setToNow = () => {
+    setFormData((prev) => ({ ...prev, recordedAt: getLocalISO() }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,11 +55,7 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
 
       setSuccess("Reading saved successfully!");
       setFormData({
-        recordedAt: new Date(
-          Date.now() - new Date().getTimezoneOffset() * 60000
-        )
-          .toISOString()
-          .slice(0, 16),
+        recordedAt: getLocalISO(),
         meterKwh: "",
         buyKwh: "",
         notes: "",
@@ -88,9 +90,18 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Date & Time */}
           <div>
-            <label className="input-label" htmlFor="recordedAt">
-              Date &amp; Time
-            </label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="input-label mb-0" htmlFor="recordedAt">
+                Date &amp; Time
+              </label>
+              <button
+                type="button"
+                className="text-xs text-accent hover:underline flex items-center gap-1 cursor-pointer"
+                onClick={setToNow}
+              >
+                🕒 Now
+              </button>
+            </div>
             <input
               id="recordedAt"
               type="datetime-local"

@@ -20,6 +20,7 @@ interface MonthlyData {
   totalCost: number;
   entries: number;
   avgDailyKwh: number;
+  avgDailyCost: number;
 }
 
 export default function MonthlyReport({ readings }: MonthlyReportProps) {
@@ -37,11 +38,13 @@ export default function MonthlyReport({ readings }: MonthlyReportProps) {
       totalCost: 0,
       entries: 0,
       avgDailyKwh: 0,
+      avgDailyCost: 0,
     };
     existing.totalKwh += r.kwhUsed || 0;
     existing.totalCost += r.costRp || 0;
     existing.entries++;
     existing.avgDailyKwh = existing.totalKwh / existing.entries;
+    existing.avgDailyCost = existing.totalCost / existing.entries;
     monthlyMap.set(key, existing);
   });
 
@@ -77,10 +80,11 @@ export default function MonthlyReport({ readings }: MonthlyReportProps) {
           <thead>
             <tr>
               <th>Month</th>
-              <th>Total kWh</th>
-              <th>Total Cost</th>
               <th>Entries</th>
-              <th>Avg/Day</th>
+              <th>Avg kWh/Day</th>
+              <th>Total kWh</th>
+              <th>Avg Cost/Day</th>
+              <th>Total Cost</th>
             </tr>
           </thead>
           <tbody>
@@ -89,16 +93,22 @@ export default function MonthlyReport({ readings }: MonthlyReportProps) {
                 <td className="font-medium">
                   {getMonthName(m.month)} {m.year}
                 </td>
+                <td className="muted">
+                  {m.entries}/{new Date(m.year, m.month + 1, 0).getDate()}
+                </td>
+                <td>
+                  <span className="font-medium">{formatKwh(m.avgDailyKwh)}</span>
+                  <span className="text-text-muted text-xs"> kWh</span>
+                </td>
                 <td>
                   <span className="font-medium">{formatKwh(m.totalKwh)}</span>
                   <span className="text-text-muted text-xs"> kWh</span>
                 </td>
                 <td className="font-medium text-warning">
-                  {formatRupiah(m.totalCost)}
+                  {formatRupiah(m.avgDailyCost)}
                 </td>
-                <td className="muted">{m.entries}</td>
-                <td className="muted">
-                  {formatKwh(m.avgDailyKwh)} kWh
+                <td className="font-medium text-warning">
+                  {formatRupiah(m.totalCost)}
                 </td>
               </tr>
             ))}
@@ -107,30 +117,38 @@ export default function MonthlyReport({ readings }: MonthlyReportProps) {
       </div>
 
       {/* Mobile cards */}
-      <div className="sm:hidden p-4 space-y-3">
+      <div className="sm:hidden p-3 space-y-2">
         {monthlyData.map((m) => (
           <div key={`${m.year}-${m.month}`} className="mobile-card">
             <p className="font-medium mb-2">
               {getMonthName(m.month)} {m.year}
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="col-span-2 border-b border-border/50 pb-2 mb-1">
+                <span className="text-text-muted text-xs">Entries</span>
+                <p className="font-semibold text-accent">
+                  {m.entries}/{new Date(m.year, m.month + 1, 0).getDate()}
+                </p>
+              </div>
+              <div>
+                <span className="text-text-muted text-xs">Avg kWh/Day</span>
+                <p className="font-medium">{formatKwh(m.avgDailyKwh)} kWh</p>
+              </div>
+              <div>
+                <span className="text-text-muted text-xs">Avg Cost/Day</span>
+                <p className="font-medium text-warning">
+                  {formatRupiah(m.avgDailyCost)}
+                </p>
+              </div>
               <div>
                 <span className="text-text-muted text-xs">Total kWh</span>
-                <p className="font-medium">{formatKwh(m.totalKwh)}</p>
+                <p className="font-medium">{formatKwh(m.totalKwh)} kWh</p>
               </div>
               <div>
                 <span className="text-text-muted text-xs">Total Cost</span>
                 <p className="font-medium text-warning">
                   {formatRupiah(m.totalCost)}
                 </p>
-              </div>
-              <div>
-                <span className="text-text-muted text-xs">Entries</span>
-                <p>{m.entries}</p>
-              </div>
-              <div>
-                <span className="text-text-muted text-xs">Avg/Day</span>
-                <p>{formatKwh(m.avgDailyKwh)} kWh</p>
               </div>
             </div>
           </div>

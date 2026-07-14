@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       hourDiff = diffMs / (1000 * 60 * 60);
 
       // Calculate kWh consumed
-      kwhUsed = meterKwh - previousReading.meterKwh;
+      kwhUsed = (previousReading.meterKwh + (buyKwh || 0)) - meterKwh;
 
       // Calculate cost
       if (tariff !== null && kwhUsed !== null) {

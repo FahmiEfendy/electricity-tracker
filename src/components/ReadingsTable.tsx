@@ -44,9 +44,15 @@ export default function ReadingsTable({
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const [dateSort, setDateSort] = useState<"asc" | "desc">("desc");
+
+  const toggleDateSort = () => {
+    setDateSort((prev) => (prev === "desc" ? "asc" : "desc"));
+    setCurrentPage(1);
+  };
 
   // Filter readings by month
-  const filteredReadings =
+  const monthFilteredReadings =
     selectedMonth === "all"
       ? readings
       : readings.filter((r) => {
@@ -54,6 +60,13 @@ export default function ReadingsTable({
           const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
           return monthKey === selectedMonth;
         });
+
+  // Sort by date
+  const filteredReadings = [...monthFilteredReadings].sort((a, b) => {
+    const diff =
+      new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime();
+    return dateSort === "asc" ? diff : -diff;
+  });
 
   // Pagination
   const totalPages = Math.max(
@@ -110,6 +123,14 @@ export default function ReadingsTable({
       buyKwh: reading.buyKwh ? String(reading.buyKwh) : "",
       notes: reading.notes || "",
     });
+  };
+
+  const handleSetToNow = () => {
+    const d = new Date();
+    const localISO = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setEditForm((prev) => ({ ...prev, recordedAt: localISO }));
   };
 
   const handleSaveEdit = async () => {
@@ -171,7 +192,8 @@ export default function ReadingsTable({
 
         {/* Month filter */}
         <select
-          className="input-field w-auto"
+          className="input-field"
+          style={{ width: "auto", minWidth: "160px" }}
           value={selectedMonth}
           onChange={(e) => {
             setSelectedMonth(e.target.value);
@@ -199,7 +221,13 @@ export default function ReadingsTable({
         <table className="data-table">
           <thead>
             <tr>
-              <th>Date</th>
+              <th
+                className="cursor-pointer select-none hover:text-accent transition-colors"
+                onClick={toggleDateSort}
+                title="Sort by date"
+              >
+                Date {dateSort === "asc" ? "▲" : "▼"}
+              </th>
               <th>Time</th>
               <th>Meter (kWh)</th>
               <th>Hour Diff</th>
@@ -221,7 +249,16 @@ export default function ReadingsTable({
                     <td colSpan={isAdmin ? 9 : 8}>
                       <div className="flex flex-wrap gap-3 items-end p-2">
                         <div>
-                          <label className="input-label">Date &amp; Time</label>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <label className="input-label mb-0">Date &amp; Time</label>
+                            <button
+                              type="button"
+                              className="text-[10px] text-accent hover:underline flex items-center gap-0.5 cursor-pointer"
+                              onClick={handleSetToNow}
+                            >
+                              🕒 Now
+                            </button>
+                          </div>
                           <input
                             type="datetime-local"
                             className="input-field"
@@ -379,7 +416,7 @@ export default function ReadingsTable({
       </div>
 
       {/* Mobile card view */}
-      <div className="md:hidden p-4 space-y-3">
+      <div className="md:hidden p-3 space-y-2">
         {paginatedReadings.map((r) => {
           const date = new Date(r.recordedAt);
           return (
