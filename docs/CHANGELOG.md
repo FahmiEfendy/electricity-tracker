@@ -13,6 +13,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.3.0] — 2026-07-16
+
+### Added
+- **`isEstimated` field on `MeterReading`** — persists whether a row was auto-filled for a missing calendar day, rather than computing this client-side on every page load
+- **Server-side gap backfill (`lib/backfillEstimates.ts`)** — `GET /api/readings` now detects calendar-day gaps between real readings and persists an estimated row for each missing day directly to the database (flat-rate linear interpolation, same formula previously computed client-side only). Wrapped in a Postgres advisory lock (`pg_advisory_lock`) so concurrent requests serialize instead of racing, with a unique constraint on `recordedAt` as a backstop
+- **Buy kWh auto-suggestion (`DataEntryForm.tsx`)** — when a new meter reading is higher than the previous one (implying a token purchase), the Buy kWh field auto-fills a suggested value. The suggestion checks the 5 nearest candidate multiples of 11.5 (the token purchase unit) around the raw meter jump and picks whichever implies a consumption rate closest to the median rate of the last 8 real readings, rather than a single blended estimate that can snap to the wrong multiple. Recomputes on either the meter reading or date field changing, in any order. Only activates once the date field has been deliberately set (not left at today's default), since elapsed time against the wrong anchor date produces nonsensical suggestions
+- **Buy kWh input step** — number input step set to `11.5` (`lib/utils.ts` → `BUY_KWH_UNIT`) in both the New Reading form and inline edit row, so the native spinner increments/decrements by one purchase unit
+
+### Fixed
+- **Corrupted timestamps from a prior bulk import** — spot-checked and corrected at least one row (2026-03-01) where `recordedAt` didn't match the source spreadsheet; if reported values look off, cross-check `recordedAt`/`hourDiff` against the original source, since more rows from that import may carry similar drift
+
+---
+
 ## [0.2.0] — 2026-07-14
 
 ### Fixed

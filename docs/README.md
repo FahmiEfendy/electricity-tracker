@@ -53,7 +53,8 @@ app/
 │   └── lib/                  # Utilities
 │       ├── prisma.ts         # Prisma client singleton (pg adapter)
 │       ├── recalculate.ts    # Derived field recalculation helper
-│       └── utils.ts          # Formatting helpers (Rupiah, kWh, dates)
+│       ├── backfillEstimates.ts # Server-side gap-fill (runs on every GET /api/readings)
+│       └── utils.ts          # Formatting helpers (Rupiah, kWh, dates), BUY_KWH_UNIT constant
 ├── prisma/
 │   ├── schema.prisma         # Database schema (Settings, MeterReading)
 │   ├── seed.ts               # Database seeder (default tariff)
@@ -81,6 +82,12 @@ costRp  = kwhUsed × tariff_per_kwh
 
 ### Latest Reading Suppression
 The chronologically newest reading has its `kwhUsed`, `costRp`, and `hourDiff` hidden on the frontend (set to `null` in `fetchReadings`) because no subsequent reading exists to calculate them against. The raw values are preserved in the database unchanged.
+
+### Missing-Day Backfill
+`GET /api/readings` calls `backfillEstimatedReadings()` before returning data. It scans real (`isEstimated: false`) readings for calendar-day gaps and persists a flat-rate linear-interpolated row (`isEstimated: true`) for each missing day, so the returned data has no gaps without requiring a reading every single day. This runs on every request, so it's wrapped in a Postgres advisory lock (serializes concurrent calls) with a `@@unique([recordedAt])` constraint as a backstop — do not remove either without replacing the concurrency protection, since this combination directly resolved a prior data-corruption incident (see CHANGELOG 0.3.0).
+
+### Buy kWh Suggestion
+Token/credit purchases are always sold in multiples of `BUY_KWH_UNIT` (11.5 kWh). When a new meter reading is higher than the previous one, `DataEntryForm` suggests a Buy kWh value: it evaluates the 5 nearest 11.5-multiples around the raw meter jump and picks whichever implies a consumption rate closest to the median of the last 8 real readings' kWh/hour — the raw jump alone always understates the true purchase, since `meterKwh = previousMeter + buyKwh - consumed` and consumption during the gap eats into the same delta. This is a suggestion only; admins can always overwrite it before saving.
 
 ## Environment Variables
 
@@ -186,6 +193,9 @@ Uses PostgreSQL (`db-postgres`) from the shared `databases/` stack via the `prox
 | `costRp` | Float? | Cost in Rupiah (calculated) |
 | `tariffAtEntry` | Float? | Tariff snapshot at time of entry |
 | `notes` | String? | Optional notes |
+| `isEstimated` | Boolean | `true` if auto-filled by the missing-day backfill, not a real user entry (default `false`) |
+
+`recordedAt` has a unique constraint — the backfill relies on this to prevent duplicate rows for the same day under concurrent requests.
 
 ## Troubleshooting
 
@@ -198,6 +208,8 @@ Uses PostgreSQL (`db-postgres`) from the shared `databases/` stack via the `prox
 | Blank page after deploy | Check `docker logs et-app` for Next.js startup errors |
 | Import fails | Verify CSV columns match: `Date, kWh, Time, Hour Difference, Buy kWh, kWh Used, Cost (Rp), Notes` |
 | Negative kWh values after edit | Run `npx tsx prisma/recalculate-all.ts` to repair all derived fields |
+| Duplicate/estimated rows for the same day | Should not happen with the unique constraint + advisory lock in place (see CHANGELOG 0.3.0). If it does, check that both the `@@unique([recordedAt])` migration and the `pg_advisory_lock` wrapper in `lib/backfillEstimates.ts` are actually deployed — this combination is load-bearing, not optional hardening |
+| Buy kWh suggestion looks way off | Check the previous reading's `recordedAt` and recent `hourDiff`/`kwhUsed` values for corruption (e.g. from a bad historical import) — the suggestion is only as good as those inputs. A single wrong timestamp on the previous reading is enough to shift it to the wrong 11.5-multiple |
 
 ## Related Files
 

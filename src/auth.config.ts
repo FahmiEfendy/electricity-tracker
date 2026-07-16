@@ -6,9 +6,7 @@ export const authConfig: NextAuthConfig = {
   },
   trustHost: true,
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-
+    authorized({ request: { nextUrl } }) {
       // API routes that require auth (POST/PUT/DELETE)
       const protectedApiPaths = ["/api/readings", "/api/settings", "/api/import"];
       const isProtectedApi = protectedApiPaths.some((path) =>

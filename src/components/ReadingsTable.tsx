@@ -7,6 +7,7 @@ import {
   formatDate,
   formatTime,
   formatNumber,
+  BUY_KWH_UNIT,
 } from "@/lib/utils";
 
 interface MeterReading {
@@ -19,6 +20,7 @@ interface MeterReading {
   costRp: number | null;
   tariffAtEntry: number | null;
   notes: string | null;
+  isEstimated?: boolean;
 }
 
 interface ReadingsTableProps {
@@ -290,7 +292,7 @@ export default function ReadingsTable({
                           <label className="input-label">Buy kWh</label>
                           <input
                             type="number"
-                            step="0.01"
+                            step={BUY_KWH_UNIT}
                             className="input-field"
                             value={editForm.buyKwh}
                             onChange={(e) =>
@@ -335,8 +337,15 @@ export default function ReadingsTable({
               }
 
               return (
-                <tr key={r.id}>
-                  <td>{formatDate(date)}</td>
+                <tr key={r.id} className={r.isEstimated ? "opacity-75 bg-accent/5 italic" : ""}>
+                  <td>
+                    {formatDate(date)}
+                    {r.isEstimated && (
+                      <span className="ml-2 text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded-full font-normal not-italic">
+                        Estimated
+                      </span>
+                    )}
+                  </td>
                   <td className="muted">{formatTime(date)}</td>
                   <td className="font-medium">{formatKwh(r.meterKwh)}</td>
                   <td className="muted">
@@ -362,40 +371,44 @@ export default function ReadingsTable({
                   </td>
                   {isAdmin && (
                     <td>
-                      <div className="flex gap-1">
-                        <button
-                          className="btn-icon"
-                          onClick={() => startEdit(r)}
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        {deleteConfirm === r.id ? (
-                          <div className="flex gap-1">
-                            <button
-                              className="btn-danger text-xs"
-                              onClick={() => handleDelete(r.id)}
-                              disabled={loading}
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              className="btn-secondary text-xs"
-                              onClick={() => setDeleteConfirm(null)}
-                            >
-                              No
-                            </button>
-                          </div>
-                        ) : (
+                      {r.isEstimated ? (
+                        <span className="text-[10px] text-text-muted italic">Auto-filled</span>
+                      ) : (
+                        <div className="flex gap-1">
                           <button
                             className="btn-icon"
-                            onClick={() => setDeleteConfirm(r.id)}
-                            title="Delete"
+                            onClick={() => startEdit(r)}
+                            title="Edit"
                           >
-                            🗑️
+                            ✏️
                           </button>
-                        )}
-                      </div>
+                          {deleteConfirm === r.id ? (
+                            <div className="flex gap-1">
+                              <button
+                                className="btn-danger text-xs"
+                                onClick={() => handleDelete(r.id)}
+                                disabled={loading}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                className="btn-secondary text-xs"
+                                onClick={() => setDeleteConfirm(null)}
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="btn-icon"
+                              onClick={() => setDeleteConfirm(r.id)}
+                              title="Delete"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -420,13 +433,20 @@ export default function ReadingsTable({
         {paginatedReadings.map((r) => {
           const date = new Date(r.recordedAt);
           return (
-            <div key={r.id} className="mobile-card">
+            <div key={r.id} className={`mobile-card ${r.isEstimated ? "opacity-75 bg-accent/5 italic" : ""}`}>
               <div className="flex justify-between items-start mb-2">
                 <div>
-                  <p className="font-medium">{formatDate(date)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{formatDate(date)}</p>
+                    {r.isEstimated && (
+                      <span className="text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded-full font-normal not-italic">
+                        Estimated
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-text-muted">{formatTime(date)}</p>
                 </div>
-                {isAdmin && (
+                {isAdmin && !r.isEstimated && (
                   <div className="flex gap-1">
                     <button
                       className="btn-icon text-xs"

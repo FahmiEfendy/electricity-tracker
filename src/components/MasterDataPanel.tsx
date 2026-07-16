@@ -15,10 +15,6 @@ export default function MasterDataPanel({ isAdmin }: MasterDataPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    fetchTariff();
-  }, []);
-
   const fetchTariff = async () => {
     try {
       const res = await fetch("/api/settings");
@@ -28,6 +24,17 @@ export default function MasterDataPanel({ isAdmin }: MasterDataPanelProps) {
       console.error("Failed to fetch tariff");
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await fetchTariff();
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSave = async () => {
     setLoading(true);

@@ -1,3 +1,6 @@
+// Token/credit purchases are always sold in multiples of this base unit.
+export const BUY_KWH_UNIT = 11.5;
+
 /**
  * Format a number as Indonesian Rupiah currency
  * @example formatRupiah(22425.01) => "Rp22.425,01"

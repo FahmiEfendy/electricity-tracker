@@ -27,9 +27,10 @@ model MeterReading {
   costRp        Float?                // Calculated: cost in Rupiah
   tariffAtEntry Float?                // Snapshot of tariff at time of entry
   notes         String?               // Optional notes (1-10 words)
+  isEstimated   Boolean  @default(false) // True if auto-filled by interpolation, not a real user entry
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@index([recordedAt])
+  @@unique([recordedAt])
   @@map("meter_readings")
 }

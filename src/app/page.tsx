@@ -21,6 +21,7 @@ interface MeterReading {
   costRp: number | null;
   tariffAtEntry: number | null;
   notes: string | null;
+  isEstimated?: boolean;
 }
 
 interface SummaryData {
@@ -129,7 +130,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    fetchReadings();
+    let cancelled = false;
+    (async () => {
+      await fetchReadings();
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchReadings]);
 
   const summary = calculateSummary(readings);
@@ -162,7 +170,7 @@ export default function HomePage() {
 
         {/* Admin section: Data Entry */}
         {isAdmin && (
-          <DataEntryForm onSuccess={fetchReadings} />
+          <DataEntryForm onSuccess={fetchReadings} readings={readings} />
         )}
 
         {/* Readings Table */}

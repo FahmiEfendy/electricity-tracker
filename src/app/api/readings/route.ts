@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { recalculateDerivedFields } from "@/lib/recalculate";
+import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 
 // GET /api/readings — Public: list readings with optional filters
 export async function GET(request: NextRequest) {
   try {
+    await backfillEstimatedReadings();
+
     const { searchParams } = request.nextUrl;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -111,7 +114,7 @@ export async function POST(request: NextRequest) {
     let hourDiff: number | null = null;
     let kwhUsed: number | null = null;
     let costRp: number | null = null;
-    let tariffAtEntry: number | null = tariff;
+    const tariffAtEntry: number | null = tariff;
 
     if (previousReading) {
       // Calculate time difference in decimal hours

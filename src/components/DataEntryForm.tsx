@@ -1,12 +1,58 @@
 "use client";
 
 import { useState } from "react";
+import { BUY_KWH_UNIT } from "@/lib/utils";
+
+interface MeterReading {
+  id: string;
+  recordedAt: string;
+  meterKwh: number;
+  buyKwh: number | null;
+  hourDiff: number | null;
+  kwhUsed: number | null;
+  costRp: number | null;
+  isEstimated?: boolean;
+}
 
 interface DataEntryFormProps {
   onSuccess: () => void;
+  readings: MeterReading[];
 }
 
-export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
+// How many recent real readings to average for the expected consumption rate.
+const RATE_SAMPLE_SIZE = 8;
+
+export default function DataEntryForm({ onSuccess, readings }: DataEntryFormProps) {
+  // Most recent real (non-estimated) reading — the baseline for the next entry.
+  const previousReading = readings
+    .filter((r) => !r.isEstimated)
+    .reduce<MeterReading | null>(
+      (latest, r) =>
+        !latest || new Date(r.recordedAt) > new Date(latest.recordedAt) ? r : latest,
+      null
+    );
+  const previousMeterKwh = previousReading?.meterKwh ?? null;
+
+  // Typical kWh/hour consumption from the most recent real readings, used to
+  // estimate how much was consumed during the gap before a token purchase —
+  // the raw meter jump alone understates buyKwh by whatever was consumed.
+  // Uses the median rather than the mean: a handful of suspiciously identical
+  // or otherwise anomalous historical rows (e.g. old interpolation artifacts
+  // mislabeled as real) can drag a mean far off without dominating a median.
+  const recentRateKwhPerHour = (() => {
+    const rates = readings
+      .filter((r) => !r.isEstimated && r.hourDiff && r.kwhUsed != null && r.hourDiff > 0)
+      .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
+      .slice(0, RATE_SAMPLE_SIZE)
+      .map((r) => r.kwhUsed! / r.hourDiff!)
+      .sort((a, b) => a - b);
+
+    if (rates.length === 0) return null;
+
+    const mid = Math.floor(rates.length / 2);
+    return rates.length % 2 === 0 ? (rates[mid - 1] + rates[mid]) / 2 : rates[mid];
+  })();
+
   const getLocalISO = () => {
     const d = new Date();
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
@@ -20,9 +66,98 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
     buyKwh: "",
     notes: "",
   });
+  const [buyKwhTouched, setBuyKwhTouched] = useState(false);
+  const [recordedAtTouched, setRecordedAtTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Suggests Buy kWh from a candidate meterKwh/recordedAt pair, without
+  // depending on which field the user edited most recently — the date and
+  // meter reading can be filled in either order.
+  const suggestBuyKwh = (meterKwhStr: string, recordedAtStr: string, dateIsTouched: boolean) => {
+    const parsed = parseFloat(meterKwhStr);
+
+    if (
+      previousMeterKwh == null ||
+      previousReading == null ||
+      isNaN(parsed) ||
+      parsed <= previousMeterKwh
+    ) {
+      return null;
+    }
+
+    const jump = parsed - previousMeterKwh;
+
+    // Only trust the elapsed-time adjustment once the user has deliberately
+    // set the date/time — otherwise recordedAt is still today's default and
+    // "elapsed" would span months instead of the real ~1-day gap.
+    const elapsedHours =
+      dateIsTouched && recordedAtStr
+        ? (new Date(recordedAtStr).getTime() -
+            new Date(previousReading.recordedAt).getTime()) /
+          (1000 * 60 * 60)
+        : 0;
+
+    // A single blended estimate can land just past a rounding boundary and
+    // snap to the wrong multiple. Instead, check every plausible multiple of
+    // 11.5 near the raw jump and pick whichever implies a consumption rate
+    // closest to recent actual usage — directly comparable rather than
+    // rounding a fuzzy blended number.
+    let suggestedBuyKwh = Math.round(jump / BUY_KWH_UNIT) * BUY_KWH_UNIT;
+    if (elapsedHours > 0 && recentRateKwhPerHour != null) {
+      const roughMultiple = jump / BUY_KWH_UNIT;
+      const candidates = [-2, -1, 0, 1, 2].map(
+        (offset) => (Math.round(roughMultiple) + offset) * BUY_KWH_UNIT
+      );
+
+      let bestCandidate = suggestedBuyKwh;
+      let bestDiff = Infinity;
+      for (const candidate of candidates) {
+        const impliedKwhUsed = candidate - jump;
+        if (impliedKwhUsed < 0) continue; // meter can't gain kWh from usage
+        const impliedRate = impliedKwhUsed / elapsedHours;
+        const diff = Math.abs(impliedRate - recentRateKwhPerHour);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCandidate = candidate;
+        }
+      }
+      suggestedBuyKwh = bestCandidate;
+    }
+
+    return suggestedBuyKwh > 0 ? suggestedBuyKwh : null;
+  };
+
+  const handleMeterKwhChange = (value: string) => {
+    if (buyKwhTouched) {
+      setFormData((prev) => ({ ...prev, meterKwh: value }));
+      return;
+    }
+
+    const suggested = suggestBuyKwh(value, formData.recordedAt, recordedAtTouched);
+    setFormData((prev) => ({
+      ...prev,
+      meterKwh: value,
+      buyKwh: suggested != null ? suggested.toString() : prev.buyKwh,
+    }));
+  };
+
+  const handleRecordedAtChange = (value: string) => {
+    setRecordedAtTouched(true);
+
+    if (buyKwhTouched) {
+      setFormData((prev) => ({ ...prev, recordedAt: value }));
+      return;
+    }
+
+    const suggested = suggestBuyKwh(formData.meterKwh, value, true);
+    setFormData((prev) => ({
+      ...prev,
+      recordedAt: value,
+      buyKwh: suggested != null ? suggested.toString() : prev.buyKwh,
+    }));
+  };
 
   const setToNow = () => {
     setFormData((prev) => ({ ...prev, recordedAt: getLocalISO() }));
@@ -60,6 +195,8 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
         buyKwh: "",
         notes: "",
       });
+      setBuyKwhTouched(false);
+      setRecordedAtTouched(false);
       onSuccess();
 
       setTimeout(() => setSuccess(""), 3000);
@@ -107,9 +244,7 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
               type="datetime-local"
               className="input-field"
               value={formData.recordedAt}
-              onChange={(e) =>
-                setFormData({ ...formData, recordedAt: e.target.value })
-              }
+              onChange={(e) => handleRecordedAtChange(e.target.value)}
               required
             />
           </div>
@@ -126,9 +261,7 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
               className="input-field"
               placeholder="e.g. 232.32"
               value={formData.meterKwh}
-              onChange={(e) =>
-                setFormData({ ...formData, meterKwh: e.target.value })
-              }
+              onChange={(e) => handleMeterKwhChange(e.target.value)}
               required
             />
           </div>
@@ -142,13 +275,14 @@ export default function DataEntryForm({ onSuccess }: DataEntryFormProps) {
             <input
               id="buyKwh"
               type="number"
-              step="0.01"
+              step={BUY_KWH_UNIT}
               className="input-field"
               placeholder="kWh purchased"
               value={formData.buyKwh}
-              onChange={(e) =>
-                setFormData({ ...formData, buyKwh: e.target.value })
-              }
+              onChange={(e) => {
+                setBuyKwhTouched(true);
+                setFormData({ ...formData, buyKwh: e.target.value });
+              }}
             />
           </div>
 
