@@ -38,8 +38,8 @@ RUN adduser --system --uid 1001 nextjs
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-# Copy full node_modules and standalone app for Next.js and Prisma migrations
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+# Copy full node_modules (including generated Prisma engines) and standalone app
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
