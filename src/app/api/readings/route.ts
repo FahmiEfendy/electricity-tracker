@@ -8,6 +8,8 @@ import {
   createReadingSchema,
   formatZodError,
 } from "@/lib/validations";
+import { verifySameOrigin } from "@/lib/csrf";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 // GET /api/readings — Public: list readings with optional filters
 export async function GET(request: NextRequest) {
@@ -80,6 +82,12 @@ export async function GET(request: NextRequest) {
 // POST /api/readings — Admin only: create a new meter reading
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitError = checkRateLimit(request, "mutation");
+    if (rateLimitError) return rateLimitError;
+
+    const csrfError = verifySameOrigin(request);
+    if (csrfError) return csrfError;
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

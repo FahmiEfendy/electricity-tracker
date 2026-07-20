@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { updateTariffSchema, formatZodError } from "@/lib/validations";
+import { verifySameOrigin } from "@/lib/csrf";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 // GET /api/settings — Public: fetch current tariff
 export async function GET() {
@@ -25,6 +27,12 @@ export async function GET() {
 // PUT /api/settings — Admin only: update tariff
 export async function PUT(request: NextRequest) {
   try {
+    const rateLimitError = checkRateLimit(request, "mutation");
+    if (rateLimitError) return rateLimitError;
+
+    const csrfError = verifySameOrigin(request);
+    if (csrfError) return csrfError;
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

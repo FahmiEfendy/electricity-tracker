@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
+import { verifySameOrigin } from "@/lib/csrf";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 /**
  * POST /api/import — Admin only
@@ -15,6 +17,12 @@ import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitError = checkRateLimit(request, "mutation");
+    if (rateLimitError) return rateLimitError;
+
+    const csrfError = verifySameOrigin(request);
+    if (csrfError) return csrfError;
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

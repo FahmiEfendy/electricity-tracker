@@ -4,12 +4,20 @@ import { auth } from "@/auth";
 import { recalculateDerivedFields } from "@/lib/recalculate";
 import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 import { updateReadingSchema, formatZodError } from "@/lib/validations";
+import { verifySameOrigin } from "@/lib/csrf";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 // PUT /api/readings/[id] — Admin only: edit a reading
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
+    const rateLimitError = checkRateLimit(request, "mutation");
+    if (rateLimitError) return rateLimitError;
+
+    const csrfError = verifySameOrigin(request);
+    if (csrfError) return csrfError;
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -120,8 +128,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/readings/[id] — Admin only: delete a reading
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    const rateLimitError = checkRateLimit(request, "mutation");
+    if (rateLimitError) return rateLimitError;
+
+    const csrfError = verifySameOrigin(request);
+    if (csrfError) return csrfError;
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
