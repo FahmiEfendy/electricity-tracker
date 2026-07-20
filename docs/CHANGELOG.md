@@ -6,16 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [1.0.0] — 2026-07-20
 
-### Planned
-- Production-ready Docker Compose with security hardening
+### 🎉 First Stable Release
+Promoted to production after six iterative pre-release versions covering core CRUD functionality, 
+bug fixes, performance improvements, and a full security hardening pass (input validation, CSRF 
+protection, rate limiting, security headers, graceful shutdown).
+
+No functional changes since `0.6.0` — this release marks the application as stable and 
+production-ready. Full development history is documented below in `[0.1.0]`–`[0.6.0]`.
 
 ---
 
 ## [0.6.0] — 2026-07-20
 
 ### Security
+- **Production-ready Docker Compose security hardening (`docker-compose.yml`)** — Configured `cap_drop: ALL` (drops Linux capabilities), `read_only: true` (read-only root filesystem with `tmpfs: /tmp` mount), `no-new-privileges:true` (prevents privilege escalation), memory reservation/limits (`128M`/`256M`), and `json-file` log rotation (`max-size: 10m`, `max-file: 3`) to prevent host disk exhaustion and container escapes.
 - **CSRF protection (`src/lib/csrf.ts`)** — Added `verifySameOrigin()` helper enforcing Same-Origin checks on all state-changing API routes (`POST`, `PUT`, `DELETE`). Cross-origin mutation requests are rejected with HTTP 403. Inspects `Origin` and `Referer` headers against `Host`/`X-Forwarded-Host`.
 - **Rate limiting (`src/lib/rateLimit.ts`)** — Implemented in-memory sliding-window rate limiter: 5 req/min on `/api/auth` (prevents brute-force login) and 30 req/min on mutation endpoints. Returns HTTP 429 with `Retry-After` header when exceeded. Background GC purges expired entries every 5 minutes.
 - **Security headers (`next.config.ts`)** — Applied `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, HSTS (`max-age=31536000; includeSubDomains; preload`), and Content-Security-Policy to all routes via Next.js `headers()`.
