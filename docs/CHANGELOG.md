@@ -13,6 +13,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.6.0] — 2026-07-20
+
+### Security
+- **CSRF protection (`src/lib/csrf.ts`)** — Added `verifySameOrigin()` helper enforcing Same-Origin checks on all state-changing API routes (`POST`, `PUT`, `DELETE`). Cross-origin mutation requests are rejected with HTTP 403. Inspects `Origin` and `Referer` headers against `Host`/`X-Forwarded-Host`.
+- **Rate limiting (`src/lib/rateLimit.ts`)** — Implemented in-memory sliding-window rate limiter: 5 req/min on `/api/auth` (prevents brute-force login) and 30 req/min on mutation endpoints. Returns HTTP 429 with `Retry-After` header when exceeded. Background GC purges expired entries every 5 minutes.
+- **Security headers (`next.config.ts`)** — Applied `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, HSTS (`max-age=31536000; includeSubDomains; preload`), and Content-Security-Policy to all routes via Next.js `headers()`.
+
+### Added
+- **Graceful shutdown (`src/lib/prisma.ts`)** — Registered `SIGTERM` and `SIGINT` handlers to cleanly disconnect Prisma (`$disconnect()`) and drain the `pg.Pool` (`pool.end()`) before process exit. Guarded with `isShuttingDown` flag to prevent duplicate executions.
+- **Production DB migration entrypoint (`docker-entrypoint.sh`)** — New container entrypoint script that runs `npx prisma migrate deploy` automatically before starting the Next.js server. Ensures schema migrations are always applied on deploy without manual intervention.
+- **Updated Dockerfile** — Production `runner` stage now copies Prisma schema, migrations directory, and CLI into the image so `migrate deploy` can run at container startup.
+- **Database seeder (`prisma/seed.ts`)** — Updated seeder with 181 real meter readings spanning January 1, 2026 to June 30, 2026 (exported directly from production database). Uses idempotent `upsert` so it is safe to run multiple times. Seed command registered in `prisma.config.ts` for `npm run db:seed`.
+
+---
+
 ## [0.5.0] — 2026-07-20
 
 ### Security

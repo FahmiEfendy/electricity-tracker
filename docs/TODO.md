@@ -2,7 +2,6 @@
 
 ## 🔴 Critical
 
-- [ ] **Database migrations in production** — Run `prisma migrate deploy` automatically on container startup or via CI/CD
 
 ## 🟡 Medium
 

@@ -247,3 +247,61 @@ Run through this checklist after every deployment or significant code change.
   npx tsx prisma/recalculate-all.ts
   ```
   **Expected:** Script completes without errors, all kWh values are positive
+
+---
+
+## 11. Security Hardening (v0.6.0)
+
+### CSRF Protection
+
+- [ ] **Cross-origin mutation rejected**
+  Send a `POST /api/readings` with `Origin: http://attacker.com` and a valid session cookie
+  **Expected:** `403` with `CSRF check failed: Cross-origin request rejected`
+
+- [ ] **Missing Origin/Referer rejected**
+  Send a `POST /api/readings` with no `Origin` or `Referer` header
+  **Expected:** `403` with `CSRF check failed: Missing Origin and Referer headers`
+
+- [ ] **Same-origin mutation accepted**
+  Send a `POST /api/readings` from the app UI (browser same-origin)
+  **Expected:** Request is accepted normally (not blocked)
+
+### Rate Limiting
+
+- [ ] **Auth rate limit triggers**
+  Fire 6 consecutive `POST /api/auth/signin` requests within 60 seconds from the same IP
+  **Expected:** 6th request returns `429` with `Retry-After` header ≥ 1
+
+- [ ] **Mutation rate limit triggers**
+  Fire 31 consecutive `POST /api/readings` requests within 60 seconds from the same IP
+  **Expected:** 31st request returns `429 Too many requests`
+
+- [ ] **Rate limit resets after window expires**
+  Wait 60 seconds after hitting the auth rate limit, then attempt login again
+  **Expected:** Request is accepted normally
+
+### Security Headers
+
+- [ ] **Security headers present on response**
+  Open browser DevTools → Network → any page request → Response Headers
+  **Expected:** `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Content-Security-Policy` are all present
+
+- [ ] **Clickjacking blocked**
+  Try embedding the app in an `<iframe>` from another origin
+  **Expected:** Browser blocks the iframe with `Refused to display ... in a frame`
+
+### Production Migration Pipeline
+
+- [ ] **Container runs migrations on startup**
+  Start fresh container with database that has pending migrations
+  **Expected:** `docker logs et-app` shows `Running production database migrations...` before `Starting Next.js application...`
+
+- [ ] **Entrypoint fails fast on migration error**
+  Point container to unreachable database
+  **Expected:** Container exits non-zero immediately (due to `set -e` in entrypoint)
+
+### Graceful Shutdown
+
+- [ ] **SIGTERM closes DB connections cleanly**
+  Send `docker stop et-app` (issues SIGTERM, waits 10s, then SIGKILL)
+  **Expected:** `docker logs et-app --tail 5` shows `Database connection pool closed cleanly.` before process exit
