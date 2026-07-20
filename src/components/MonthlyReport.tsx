@@ -25,32 +25,51 @@ interface MonthlyData {
 
 export default function MonthlyReport({ readings }: MonthlyReportProps) {
   // Group readings by month
-  const monthlyMap = new Map<string, MonthlyData>();
+  const monthlyMap = new Map<
+    string,
+    {
+      month: number;
+      year: number;
+      totalKwh: number;
+      totalCost: number;
+      daysSet: Set<string>;
+    }
+  >();
 
   readings.forEach((r) => {
     if (r.kwhUsed == null) return;
     const date = new Date(r.recordedAt);
     const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
     const existing = monthlyMap.get(key) || {
       month: date.getMonth(),
       year: date.getFullYear(),
       totalKwh: 0,
       totalCost: 0,
-      entries: 0,
-      avgDailyKwh: 0,
-      avgDailyCost: 0,
+      daysSet: new Set<string>(),
     };
     existing.totalKwh += r.kwhUsed || 0;
     existing.totalCost += r.costRp || 0;
-    existing.entries++;
-    existing.avgDailyKwh = existing.totalKwh / existing.entries;
-    existing.avgDailyCost = existing.totalCost / existing.entries;
+    existing.daysSet.add(dayKey);
     monthlyMap.set(key, existing);
   });
 
-  const monthlyData = Array.from(monthlyMap.values()).sort(
-    (a, b) => b.year - a.year || b.month - a.month
-  );
+  const monthlyData: MonthlyData[] = Array.from(monthlyMap.values())
+    .map((item) => {
+      const daysInMonth = new Date(item.year, item.month + 1, 0).getDate();
+      const entries = Math.min(item.daysSet.size, daysInMonth);
+      return {
+        month: item.month,
+        year: item.year,
+        totalKwh: item.totalKwh,
+        totalCost: item.totalCost,
+        entries,
+        avgDailyKwh: entries > 0 ? item.totalKwh / entries : 0,
+        avgDailyCost: entries > 0 ? item.totalCost / entries : 0,
+      };
+    })
+    .sort((a, b) => b.year - a.year || b.month - a.month);
 
   if (monthlyData.length === 0) {
     return null;

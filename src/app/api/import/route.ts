@@ -94,7 +94,38 @@ export async function POST(request: NextRequest) {
         // CSV — spreadsheet formula cells can export stale/blank cached values.
         const costRp =
           kwhUsed !== null && tariff !== null ? kwhUsed * tariff : null;
-        const notes = notesStr?.trim() || null;
+        const candidateNotes = fields.slice(7).map((f) => f.trim()).filter((f) => f.length > 0);
+        const estNote = candidateNotes.find((f) => /estimated|auto-filled/i.test(f));
+        const notes = estNote || candidateNotes[0] || null;
+        const isEstimated = notes ? /estimated|auto-filled/i.test(notes) : false;
+
+        // Skip creating redundant second estimated entry if one already exists for this day
+        const dayStart = new Date(recordedAt.getFullYear(), recordedAt.getMonth(), recordedAt.getDate());
+        const dayEnd = new Date(recordedAt.getFullYear(), recordedAt.getMonth(), recordedAt.getDate() + 1);
+
+        const existingReading = await prisma.meterReading.findFirst({
+          where: {
+            OR: [
+              { recordedAt },
+              ...(isEstimated
+                ? [
+                    {
+                      recordedAt: { gte: dayStart, lt: dayEnd },
+                      isEstimated: true,
+                    },
+                    {
+                      recordedAt: { gte: dayStart, lt: dayEnd },
+                      notes: { contains: "Estimated", mode: "insensitive" as const },
+                    },
+                  ]
+                : []),
+            ],
+          },
+        });
+
+        if (existingReading) {
+          continue;
+        }
 
         await prisma.meterReading.create({
           data: {
@@ -106,6 +137,7 @@ export async function POST(request: NextRequest) {
             costRp,
             tariffAtEntry: tariff,
             notes,
+            isEstimated,
           },
         });
 
