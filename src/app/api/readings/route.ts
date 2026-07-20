@@ -3,71 +3,51 @@ import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { recalculateDerivedFields } from "@/lib/recalculate";
 import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
+import {
+  getReadingsQuerySchema,
+  createReadingSchema,
+  formatZodError,
+} from "@/lib/validations";
 
 // GET /api/readings — Public: list readings with optional filters
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
-    const month = searchParams.get("month");
-    const year = searchParams.get("year");
-    const limit = searchParams.get("limit");
-    const offset = searchParams.get("offset");
-    const sortParam = searchParams.get("sort");
-    const sortOrder = sortParam === "asc" ? "asc" : "desc";
+    const queryResult = getReadingsQuerySchema.safeParse({
+      month: searchParams.get("month") ?? undefined,
+      year: searchParams.get("year") ?? undefined,
+      limit: searchParams.get("limit") ?? undefined,
+      offset: searchParams.get("offset") ?? undefined,
+      sort: searchParams.get("sort") ?? undefined,
+    });
+
+    if (!queryResult.success) {
+      return NextResponse.json(
+        { error: formatZodError(queryResult.error) },
+        { status: 400 }
+      );
+    }
+
+    const { month, year, limit = 15, offset = 0, sort = "desc" } = queryResult.data;
 
     // Build where clause for optional month/year filtering
     const where: Record<string, unknown> = {};
 
     if (month && year) {
-      const m = parseInt(month, 10);
-      const y = parseInt(year, 10);
-
-      if (m < 1 || m > 12) {
-        return NextResponse.json(
-          { error: "month must be between 1 and 12" },
-          { status: 400 }
-        );
-      }
-      if (y < 2024 || y > 2030) {
-        return NextResponse.json(
-          { error: "year must be between 2024 and 2030" },
-          { status: 400 }
-        );
-      }
-
-      const startDate = new Date(y, m - 1, 1);
-      const endDate = new Date(y, m, 1);
-
-      where.recordedAt = {
-        gte: startDate,
-        lt: endDate,
-      };
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 1);
+      where.recordedAt = { gte: startDate, lt: endDate };
     } else if (year) {
-      const y = parseInt(year, 10);
-      if (y < 2024 || y > 2030) {
-        return NextResponse.json(
-          { error: "year must be between 2024 and 2030" },
-          { status: 400 }
-        );
-      }
-
-      const startDate = new Date(y, 0, 1);
-      const endDate = new Date(y + 1, 0, 1);
-
-      where.recordedAt = {
-        gte: startDate,
-        lt: endDate,
-      };
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year + 1, 0, 1);
+      where.recordedAt = { gte: startDate, lt: endDate };
     }
-
-    const pageLimit = limit ? parseInt(limit, 10) : 15;
-    const pageOffset = offset ? parseInt(offset, 10) : 0;
 
     const readings = await prisma.meterReading.findMany({
       where,
-      orderBy: { recordedAt: sortOrder },
-      take: pageLimit,
-      skip: pageOffset,
+      orderBy: { recordedAt: sort },
+      take: limit,
+      skip: offset,
     });
 
     const total = await prisma.meterReading.count({ where });
@@ -105,17 +85,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { recordedAt, meterKwh, buyKwh, notes } = body;
-
-    if (!recordedAt || meterKwh === undefined || meterKwh === null) {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "recordedAt and meterKwh are required" },
+        { error: "Invalid JSON request body" },
         { status: 400 }
       );
     }
 
-    const recordedDate = new Date(recordedAt);
+    const parsed = createReadingSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: formatZodError(parsed.error) },
+        { status: 400 }
+      );
+    }
+
+    const { recordedAt: recordedDate, meterKwh, buyKwh, notes } = parsed.data;
 
     // Fetch the previous reading (most recent before this one)
     const previousReading = await prisma.meterReading.findFirst({

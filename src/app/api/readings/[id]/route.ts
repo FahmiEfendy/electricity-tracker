@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { recalculateDerivedFields } from "@/lib/recalculate";
 import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
+import { updateReadingSchema, formatZodError } from "@/lib/validations";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -15,15 +16,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const body = await request.json();
-    const { recordedAt, meterKwh, buyKwh, notes } = body;
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "Invalid ID parameter" }, { status: 400 });
+    }
 
-    if (!recordedAt || meterKwh === undefined || meterKwh === null) {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "recordedAt and meterKwh are required" },
+        { error: "Invalid JSON request body" },
         { status: 400 }
       );
     }
+
+    const parsed = updateReadingSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: formatZodError(parsed.error) },
+        { status: 400 }
+      );
+    }
+
+    const { recordedAt: recordedDate, meterKwh, buyKwh, notes } = parsed.data;
 
     // Check that the reading exists
     const existing = await prisma.meterReading.findUnique({
@@ -35,8 +50,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { status: 404 }
       );
     }
-
-    const recordedDate = new Date(recordedAt);
 
     // Fetch the previous reading relative to the new recordedAt
     const previousReading = await prisma.meterReading.findFirst({
@@ -115,6 +128,9 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "Invalid ID parameter" }, { status: 400 });
+    }
 
     // Check that the reading exists
     const existing = await prisma.meterReading.findUnique({

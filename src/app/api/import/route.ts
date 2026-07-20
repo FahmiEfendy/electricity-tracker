@@ -21,6 +21,13 @@ export async function POST(request: NextRequest) {
     }
 
     const csvText = await request.text();
+    if (csvText.length > 5 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "CSV file exceeds maximum payload limit (5MB)" },
+        { status: 400 }
+      );
+    }
+
     const lines = csvText
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -29,6 +36,13 @@ export async function POST(request: NextRequest) {
     if (lines.length === 0) {
       return NextResponse.json(
         { error: "Empty CSV data" },
+        { status: 400 }
+      );
+    }
+
+    if (lines.length > 5000) {
+      return NextResponse.json(
+        { error: "CSV contains too many rows (maximum 5,000 allowed per import)" },
         { status: 400 }
       );
     }
@@ -69,9 +83,7 @@ export async function POST(request: NextRequest) {
           hourDiffStr, // Hour Difference
           buyKwhStr,   // Buy kWh
           kwhUsedStr,  // kWh Used
-          ,            // Cost (Rp) — ignored; always recalculated below
-          notesStr,    // Notes
-          // any further columns (e.g. sheet helper columns) are ignored
+          // Cost & Notes columns are handled via field slices below
         ] = fields;
 
         // Parse date and time into a single DateTime

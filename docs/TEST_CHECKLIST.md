@@ -204,8 +204,30 @@ Run through this checklist after every deployment or significant code change.
   **Expected:** `401` (unauthenticated)
 
 - [ ] **Invalid reading data returns validation error**
-  Submit a reading with missing required fields
-  **Expected:** `400` with error message
+  Submit a POST to `/api/readings` with `meterKwh: -50` or an invalid date
+  **Expected:** `400` with a descriptive Zod error message (e.g. `meterKwh: meterKwh must be a positive number`)
+
+- [ ] **Invalid query params rejected**
+  ```bash
+  curl -s "http://electricity.fahmiefendy.dev/api/readings?month=13"
+  ```
+  **Expected:** `400` with `month: Must be less than or equal to 12`
+
+- [ ] **Invalid tariff rejected**
+  Submit a PUT to `/api/settings` with `tariff_per_kwh: -100`
+  **Expected:** `400` with `tariff_per_kwh: tariff_per_kwh must be greater than 0`
+
+- [ ] **Oversized CSV import rejected**
+  Upload a CSV file exceeding 5 MB
+  **Expected:** `400` with `CSV file exceeds maximum payload limit (5MB)`
+
+- [ ] **Error boundary renders on component crash**
+  Trigger a runtime error in a client component
+  **Expected:** Custom "Something went wrong" fallback card appears (not a blank white screen). "Try Again" button recovers the component.
+
+- [ ] **Custom 404 page renders**
+  Navigate to a non-existent route, e.g. `http://electricity.fahmiefendy.dev/does-not-exist`
+  **Expected:** Custom "Page Not Found" page with "Return to Dashboard" link renders correctly
 
 ---
 

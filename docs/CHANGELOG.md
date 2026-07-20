@@ -13,6 +13,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.0] — 2026-07-20
+
+### Security
+- **Input validation & sanitization (`src/lib/validations.ts`)** — Added Zod schema validation across all server-side API routes. `GET /api/readings` query parameters (`month` 1–12, `year` 2024–2030, `limit` 1–500, `offset` ≥ 0, `sort`) are validated before hitting the database. `POST /api/readings` and `PUT /api/readings/[id]` reject non-positive `meterKwh`, negative `buyKwh`, invalid dates, and notes over 500 characters. `PUT /api/settings` rejects non-positive or non-numeric tariff values. All routes return structured 400 responses via `formatZodError()`.
+- **Import payload guards (`api/import/route.ts`)** — Added 5 MB request body size limit and 5,000-row maximum per import to prevent resource exhaustion.
+- **ID parameter hardening (`api/readings/[id]/route.ts`)** — `PUT` and `DELETE` now validate that the `id` param is a non-empty string before querying the database.
+- **JSON parse guard** — `POST /api/readings`, `PUT /api/readings/[id]`, and `PUT /api/settings` now return a structured 400 error when the request body is not valid JSON, rather than letting the parse exception surface as a 500.
+
+### Added
+- **React error boundary (`src/app/error.tsx`)** — Segment-level error boundary. Catches runtime exceptions in route components and renders a themed fallback card with "Try Again" (`reset()`) and "Go to Home" recovery options. Error digest is shown for support tracing.
+- **Global error boundary (`src/app/global-error.tsx`)** — Root layout error boundary. Catches critical failures inside `RootLayout` and renders a self-contained HTML/body fallback page with a "Reload Application" button.
+- **Custom 404 page (`src/app/not-found.tsx`)** — Styled not-found page for invalid routes, matching the app's dark theme.
+
+### Fixed
+- **`set-state-in-effect` lint error (`ReadingsTable.tsx`)** — Replaced `useEffect`-based prop sync (which triggered the lint rule) with a render-time state comparison pattern (`prevProps` ref).
+
+---
+
 ## [0.4.0] — 2026-07-20
 
 ### Performance

@@ -57,13 +57,15 @@ export default function ReadingsTable({
   const [pageSize, setPageSize] = useState(15);
   const [dateSort, setDateSort] = useState<"asc" | "desc">("desc");
 
-  // Keep state in sync with initial props if provided
-  useEffect(() => {
+  // Adjust state when initial props change
+  const [prevProps, setPrevProps] = useState({ initialReadings, initialTotal });
+  if (prevProps.initialReadings !== initialReadings || prevProps.initialTotal !== initialTotal) {
+    setPrevProps({ initialReadings, initialTotal });
     if (initialReadings.length > 0) {
       setPaginatedReadings(initialReadings);
       setTotalItems(initialTotal);
     }
-  }, [initialReadings, initialTotal]);
+  }
 
   const [availableMonths, setAvailableMonths] = useState<string[]>(() =>
     Array.from(
@@ -116,6 +118,7 @@ export default function ReadingsTable({
       // initial data already loaded via props — no fetch needed
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTableData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTableData]);

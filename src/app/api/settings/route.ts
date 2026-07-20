@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
+import { updateTariffSchema, formatZodError } from "@/lib/validations";
 
 // GET /api/settings — Public: fetch current tariff
 export async function GET() {
@@ -29,15 +30,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { tariff_per_kwh } = body;
-
-    if (tariff_per_kwh === undefined || tariff_per_kwh === null) {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "tariff_per_kwh is required" },
+        { error: "Invalid JSON request body" },
         { status: 400 }
       );
     }
+
+    const parsed = updateTariffSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: formatZodError(parsed.error) },
+        { status: 400 }
+      );
+    }
+
+    const { tariff_per_kwh } = parsed.data;
 
     const setting = await prisma.setting.upsert({
       where: { key: "tariff_per_kwh" },

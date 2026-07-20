@@ -56,7 +56,7 @@ async function backfillEstimatedReadingsUnlocked() {
     
     let effectiveBuy = next.buyKwh || 0;
     let totalKwhUsed = current.meterKwh + effectiveBuy - next.meterKwh;
-    let dailyCost = (totalKwhUsed / totalHours) * 24.0 * tariff;
+    const dailyCost = (totalKwhUsed / totalHours) * 24.0 * tariff;
 
     // If raw data in a multi-day gap produces an unrealistic daily cost (< Rp 18,000 or > Rp 40,000):
     // adjust buyKwh to exact 11.5 kWh multiple so daily usage is ~15.5 kWh/day (~Rp 27,700/day)

@@ -4,10 +4,10 @@
 
 - [ ] **Database migrations in production** — Run `prisma migrate deploy` automatically on container startup or via CI/CD
 - [ ] **CSRF protection** — Verify NextAuth CSRF token handling is active for all mutation endpoints
-- [ ] **Input validation & sanitization** — Add server-side validation on all API routes (reading values, tariff, import data)
+- [x] **Input validation & sanitization** — Add server-side validation on all API routes (reading values, tariff, import data)
 - [ ] **Rate limiting** — Add rate limiting to auth endpoints to prevent brute-force attacks
 - [ ] **Security headers** — Configure Next.js `headers()` in `next.config.ts` for CSP, X-Frame-Options, HSTS
-- [ ] **Error boundary** — Add React error boundary to prevent white-screen crashes
+- [x] **Error boundary** — Add React error boundary to prevent white-screen crashes
 - [ ] **Graceful shutdown** — Handle `SIGTERM`/`SIGINT` to close database connections cleanly
 
 ## 🟡 Medium
