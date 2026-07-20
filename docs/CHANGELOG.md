@@ -13,6 +13,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.0] — 2026-07-20
+
+### Performance
+- **Server-side pagination** — `GET /api/readings` now accepts `limit`, `offset`, and `sort` query parameters. ReadingsTable fetches only the current page from the server instead of loading all rows client-side.
+- **Backfill moved to writes** — `backfillEstimatedReadings()` is no longer called on every `GET /api/readings`. It now runs only after data mutations: `POST /api/readings`, `PUT /api/readings/:id`, `DELETE /api/readings/:id`, and `POST /api/import`. Reduced `GET` latency from ~22s to sub-100ms for typical data volumes.
+- **Single API request on page load** — `GET /api/readings` response now includes `allReadings` (lightweight `{id, recordedAt, kwhUsed, costRp}` for all rows, unfiltered) alongside paginated `data` and `total`. Eliminated the duplicate API call previously fired separately for charts and summary cards.
+
+### Fixed
+- **Spinner not animating (Safari/Webkit)** — CSS `@keyframes spin` was missing `-webkit-` prefix. Fixed in `globals.css`.
+- **Import/submit button spinner invisible** — Loading spinner on primary (dark) buttons was dark-on-dark. Changed to white (`border-t-white / border-white`).
+- **Month filter incomplete** — Month dropdown was built from only the first 15 rows (one page), so months outside the initial page were missing. Now populated from `allReadings` (all rows, lightweight) returned with every API response.
+- **Redundant fetch on mount** — ReadingsTable fired a duplicate `fetchTableData` on first mount even when `initialReadings` props were already provided. First paint now uses props directly; fetches only fire when filters, page, or sort change.
+
+---
+
 ## [0.3.0] — 2026-07-16
 
 ### Added

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { recalculateDerivedFields } from "@/lib/recalculate";
+import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -93,6 +94,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       await recalculateDerivedFields(nextReading.id);
     }
 
+    await backfillEstimatedReadings();
+
     return NextResponse.json({ data: updated });
   } catch (error) {
     console.error("PUT /api/readings/[id] error:", error);
@@ -139,6 +142,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     if (nextReading) {
       await recalculateDerivedFields(nextReading.id);
     }
+
+    await backfillEstimatedReadings();
 
     return NextResponse.json({ message: "Reading deleted" });
   } catch (error) {

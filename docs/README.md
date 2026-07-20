@@ -53,7 +53,7 @@ app/
 │   └── lib/                  # Utilities
 │       ├── prisma.ts         # Prisma client singleton (pg adapter)
 │       ├── recalculate.ts    # Derived field recalculation helper
-│       ├── backfillEstimates.ts # Server-side gap-fill (runs on every GET /api/readings)
+│       ├── backfillEstimates.ts # Server-side gap-fill (triggered on every write: POST/PUT/DELETE)
 │       └── utils.ts          # Formatting helpers (Rupiah, kWh, dates), BUY_KWH_UNIT constant
 ├── prisma/
 │   ├── schema.prisma         # Database schema (Settings, MeterReading)
@@ -80,11 +80,11 @@ costRp  = kwhUsed × tariff_per_kwh
 
 > ⚠️ This is the **opposite** of a postpaid meter. Do not change this formula to `current - previous`.
 
-### Latest Reading Suppression
-The chronologically newest reading has its `kwhUsed`, `costRp`, and `hourDiff` hidden on the frontend (set to `null` in `fetchReadings`) because no subsequent reading exists to calculate them against. The raw values are preserved in the database unchanged.
 
 ### Missing-Day Backfill
-`GET /api/readings` calls `backfillEstimatedReadings()` before returning data. It scans real (`isEstimated: false`) readings for calendar-day gaps and persists a flat-rate linear-interpolated row (`isEstimated: true`) for each missing day, so the returned data has no gaps without requiring a reading every single day. This runs on every request, so it's wrapped in a Postgres advisory lock (serializes concurrent calls) with a `@@unique([recordedAt])` constraint as a backstop — do not remove either without replacing the concurrency protection, since this combination directly resolved a prior data-corruption incident (see CHANGELOG 0.3.0).
+`POST /api/readings`, `PUT /api/readings/:id`, `DELETE /api/readings/:id`, and `POST /api/import` all call `backfillEstimatedReadings()` after completing their write. It scans real (`isEstimated: false`) readings for calendar-day gaps and persists a flat-rate linear-interpolated row (`isEstimated: true`) for each missing day. Wrapped in a Postgres advisory lock (serializes concurrent calls) with a `@@unique([recordedAt])` constraint as a backstop — do not remove either without replacing the concurrency protection (see CHANGELOG 0.3.0).
+
+> **Performance note**: backfill was intentionally moved off `GET /api/readings` to keep reads fast. `GET` no longer calls `backfillEstimatedReadings()`.
 
 ### Buy kWh Suggestion
 Token/credit purchases are always sold in multiples of `BUY_KWH_UNIT` (11.5 kWh). When a new meter reading is higher than the previous one, `DataEntryForm` suggests a Buy kWh value: it evaluates the 5 nearest 11.5-multiples around the raw meter jump and picks whichever implies a consumption rate closest to the median of the last 8 real readings' kWh/hour — the raw jump alone always understates the true purchase, since `meterKwh = previousMeter + buyKwh - consumed` and consumption during the gap eats into the same delta. This is a suggestion only; admins can always overwrite it before saving.
@@ -116,7 +116,7 @@ Token/credit purchases are always sold in multiples of `BUY_KWH_UNIT` (11.5 kWh)
 ### Meter Readings
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `GET` | `/api/readings` | List readings (supports `limit`, `offset`, `month`, `year`) | No |
+| `GET` | `/api/readings` | List readings (supports `limit`, `offset`, `sort`, `month`, `year`). Returns `{ data, total, allReadings }` — `allReadings` is a lightweight `{id, recordedAt, kwhUsed, costRp}` array of all rows (no pagination) for charts and summary cards. | No |
 | `POST` | `/api/readings` | Create a new meter reading | Yes |
 | `PUT` | `/api/readings/:id` | Update a reading (recalculates next reading too) | Yes |
 | `DELETE` | `/api/readings/:id` | Delete a reading (recalculates next reading too) | Yes |

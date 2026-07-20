@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   formatRupiah,
   formatKwh,
@@ -25,14 +25,20 @@ interface MeterReading {
 
 interface ReadingsTableProps {
   readings: MeterReading[];
+  total?: number;
+  allReadings?: { recordedAt: string }[];
   isAdmin: boolean;
   onRefresh: () => void;
+  isLoading?: boolean;
 }
 
 export default function ReadingsTable({
-  readings,
+  readings: initialReadings = [],
+  total: initialTotal = 0,
+  allReadings: initialAllReadings = [],
   isAdmin,
   onRefresh,
+  isLoading = false,
 }: ReadingsTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
@@ -43,54 +49,90 @@ export default function ReadingsTable({
   });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingTable, setLoadingTable] = useState(false);
+  const [paginatedReadings, setPaginatedReadings] = useState<MeterReading[]>(initialReadings);
+  const [totalItems, setTotalItems] = useState(initialTotal);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [dateSort, setDateSort] = useState<"asc" | "desc">("desc");
+
+  // Keep state in sync with initial props if provided
+  useEffect(() => {
+    if (initialReadings.length > 0) {
+      setPaginatedReadings(initialReadings);
+      setTotalItems(initialTotal);
+    }
+  }, [initialReadings, initialTotal]);
+
+  const [availableMonths, setAvailableMonths] = useState<string[]>(() =>
+    Array.from(
+      new Set(
+        initialAllReadings.map((r) => {
+          const date = new Date(r.recordedAt);
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        })
+      )
+    )
+      .sort()
+      .reverse()
+  );
+
+  const fetchTableData = useCallback(async () => {
+    setLoadingTable(true);
+    try {
+      let url = `/api/readings?limit=${pageSize}&offset=${(currentPage - 1) * pageSize}&sort=${dateSort}`;
+      if (selectedMonth !== "all") {
+        const [year, month] = selectedMonth.split("-");
+        url += `&month=${month}&year=${year}`;
+      }
+      const res = await fetch(url);
+      const data = await res.json();
+      setPaginatedReadings(data.data || []);
+      setTotalItems(data.total || 0);
+      // Update month filter options from lightweight all-readings list
+      if (data.allReadings?.length > 0) {
+        const monthSet = new Set<string>(
+          (data.allReadings as { recordedAt: string }[]).map((r) => {
+            const date = new Date(r.recordedAt);
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+          })
+        );
+        setAvailableMonths(Array.from(monthSet).sort().reverse());
+      }
+    } catch (err) {
+      console.error("Failed to fetch paginated readings:", err);
+    } finally {
+      setLoadingTable(false);
+    }
+  }, [pageSize, currentPage, selectedMonth, dateSort]);
+
+  // Track whether this is the very first mount — skip redundant fetch when
+  // initialReadings are already seeded from the parent's page-load request.
+  const isFirstMount = initialReadings.length > 0;
+
+  useEffect(() => {
+    if (isFirstMount && currentPage === 1 && pageSize === 15 && dateSort === "desc" && selectedMonth === "all") {
+      // initial data already loaded via props — no fetch needed
+      return;
+    }
+    fetchTableData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchTableData]);
 
   const toggleDateSort = () => {
     setDateSort((prev) => (prev === "desc" ? "asc" : "desc"));
     setCurrentPage(1);
   };
 
-  // Filter readings by month
-  const monthFilteredReadings =
-    selectedMonth === "all"
-      ? readings
-      : readings.filter((r) => {
-          const date = new Date(r.recordedAt);
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-          return monthKey === selectedMonth;
-        });
-
-  // Sort by date
-  const filteredReadings = [...monthFilteredReadings].sort((a, b) => {
-    const diff =
-      new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime();
-    return dateSort === "asc" ? diff : -diff;
-  });
-
-  // Pagination
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredReadings.length / pageSize)
-  );
+  // Pagination bounds
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const startIdx = (safePage - 1) * pageSize;
-  const endIdx = Math.min(startIdx + pageSize, filteredReadings.length);
-  const paginatedReadings = filteredReadings.slice(startIdx, endIdx);
+  const startIdx = totalItems > 0 ? (safePage - 1) * pageSize + 1 : 0;
+  const endIdx = Math.min(safePage * pageSize, totalItems);
 
-  // Get unique months for filter
-  const months = Array.from(
-    new Set(
-      readings.map((r) => {
-        const date = new Date(r.recordedAt);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      })
-    )
-  )
-    .sort()
-    .reverse();
+  // Month filter options — seeded from allReadings on first paint, kept fresh by fetchTableData
+  const months = availableMonths;
 
   // Generate smart page numbers with ellipsis
   const getPageNumbers = (): (number | string)[] => {
@@ -152,6 +194,7 @@ export default function ReadingsTable({
       });
       if (!res.ok) throw new Error("Failed to update");
       setEditingId(null);
+      await fetchTableData();
       onRefresh();
     } catch {
       alert("Failed to update reading");
@@ -166,6 +209,7 @@ export default function ReadingsTable({
       const res = await fetch(`/api/readings/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
       setDeleteConfirm(null);
+      await fetchTableData();
       onRefresh();
     } catch {
       alert("Failed to delete reading");
@@ -183,11 +227,16 @@ export default function ReadingsTable({
             <span className="text-lg">📋</span>
           </div>
           <div>
-            <h2 className="text-lg font-bold font-[family-name:var(--font-outfit)]">
-              Readings Log
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold font-[family-name:var(--font-outfit)]">
+                Readings Log
+              </h2>
+              {(isLoading || loadingTable) && (
+                <span className="spinner text-accent" style={{ width: "1rem", height: "1rem" }} title="Loading readings..." />
+              )}
+            </div>
             <p className="text-xs text-text-secondary">
-              {filteredReadings.length} entries
+              {(isLoading || loadingTable) && paginatedReadings.length === 0 ? "Loading readings..." : `${totalItems} entries`}
             </p>
           </div>
         </div>
@@ -414,7 +463,19 @@ export default function ReadingsTable({
                 </tr>
               );
             })}
-            {filteredReadings.length === 0 && (
+            {(isLoading || loadingTable) && paginatedReadings.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={isAdmin ? 9 : 8}
+                  className="text-center text-text-muted py-12"
+                >
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <div className="spinner text-accent" style={{ width: "2rem", height: "2rem" }} />
+                    <span className="text-sm font-medium text-text-secondary">Loading readings data...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedReadings.length === 0 ? (
               <tr>
                 <td
                   colSpan={isAdmin ? 9 : 8}
@@ -423,7 +484,7 @@ export default function ReadingsTable({
                   No readings found
                 </td>
               </tr>
-            )}
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -506,9 +567,14 @@ export default function ReadingsTable({
             </div>
           );
         })}
-        {filteredReadings.length === 0 && (
+        {(isLoading || loadingTable) && paginatedReadings.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <div className="spinner text-accent" style={{ width: "2rem", height: "2rem" }} />
+            <span className="text-sm font-medium text-text-secondary">Loading readings data...</span>
+          </div>
+        ) : paginatedReadings.length === 0 ? (
           <p className="text-center text-text-muted py-8">No readings found</p>
-        )}
+        ) : null}
       </div>
 
       {/* Pagination */}
@@ -533,7 +599,7 @@ export default function ReadingsTable({
           </div>
 
           <p className="text-sm text-text-secondary">
-            Showing {startIdx + 1}–{endIdx} of {filteredReadings.length}
+            Showing {startIdx}–{endIdx} of {totalItems}
           </p>
 
           <div className="flex items-center gap-1">

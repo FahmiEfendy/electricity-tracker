@@ -323,7 +323,13 @@ export default function DataEntryForm({ onSuccess, readings }: DataEntryFormProp
           <button type="submit" className="btn-primary w-full sm:w-auto" disabled={loading}>
             {loading ? (
               <span className="flex items-center gap-2 justify-center">
-                <span className="spinner" />
+                <span
+                  className="spinner"
+                  style={{
+                    borderTopColor: "#ffffff",
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                  }}
+                />
                 Saving...
               </span>
             ) : (

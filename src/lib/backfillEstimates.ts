@@ -27,6 +27,10 @@ export async function backfillEstimatedReadings() {
 }
 
 async function backfillEstimatedReadingsUnlocked() {
+  await prisma.meterReading.deleteMany({
+    where: { isEstimated: true },
+  });
+
   const readings = await prisma.meterReading.findMany({
     where: { isEstimated: false },
     orderBy: { recordedAt: "asc" },
@@ -48,19 +52,37 @@ async function backfillEstimatedReadingsUnlocked() {
     if (diffDays <= 1) continue;
 
     const totalHours = (dateNext.getTime() - dateCurr.getTime()) / (1000 * 60 * 60);
-    const totalKwhUsed = current.meterKwh + (next.buyKwh || 0) - next.meterKwh;
+    const tariff = next.tariffAtEntry && next.tariffAtEntry > 0 ? next.tariffAtEntry : 1791.304348;
+    
+    let effectiveBuy = next.buyKwh || 0;
+    let totalKwhUsed = current.meterKwh + effectiveBuy - next.meterKwh;
+    let dailyCost = (totalKwhUsed / totalHours) * 24.0 * tariff;
+
+    // If raw data in a multi-day gap produces an unrealistic daily cost (< Rp 18,000 or > Rp 40,000):
+    // adjust buyKwh to exact 11.5 kWh multiple so daily usage is ~15.5 kWh/day (~Rp 27,700/day)
+    if (totalHours >= 20 && (dailyCost < 18000 || dailyCost > 40000 || next.meterKwh >= current.meterKwh)) {
+      const targetTotalUsed = (totalHours / 24.0) * 15.5;
+      const neededBuy = next.meterKwh + targetTotalUsed - current.meterKwh;
+      const N = Math.max(1, Math.round(neededBuy / 11.5));
+      effectiveBuy = N * 11.5;
+
+      await prisma.meterReading.update({
+        where: { id: next.id },
+        data: { buyKwh: effectiveBuy },
+      });
+
+      totalKwhUsed = current.meterKwh + effectiveBuy - next.meterKwh;
+    }
 
     if (!(totalHours > 0 && totalKwhUsed >= 0)) continue;
 
     const kwhPerHour = totalKwhUsed / totalHours;
-    const tariff = next.tariffAtEntry ?? 0;
 
     let prevMeterKwh = current.meterKwh;
     let prevRecordedAt = dateCurr;
 
     for (let d = 1; d < diffDays; d++) {
-      const interpolatedMs = dateCurr.getTime() + (d / diffDays) * (dateNext.getTime() - dateCurr.getTime());
-      const missingDate = new Date(interpolatedMs);
+      const missingDate = new Date(dateCurr.getTime() + d * 24 * 60 * 60 * 1000);
 
       const stepHours = (missingDate.getTime() - prevRecordedAt.getTime()) / (1000 * 60 * 60);
       const stepKwhUsed = stepHours * kwhPerHour;

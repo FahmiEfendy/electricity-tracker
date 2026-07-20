@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
+import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 
 /**
  * POST /api/import — Admin only
@@ -114,6 +115,10 @@ export async function POST(request: NextRequest) {
           rowError instanceof Error ? rowError.message : String(rowError);
         errors.push(`Row ${rowNum}: ${message}`);
       }
+    }
+
+    if (imported > 0) {
+      await backfillEstimatedReadings();
     }
 
     return NextResponse.json({ imported, errors });
@@ -260,6 +265,11 @@ function parseDateAndTime(dateStr: string, timeStr: string): Date | null {
   const minutes = parseInt(timeParts[1], 10) || 0;
   const seconds = parseInt(timeParts[2], 10) || 0;
 
+  // Spreadsheet times are always Indonesia Western Time (WIB, UTC+7),
+  // regardless of the server process's own timezone — build the UTC instant
+  // directly instead of `new Date(y, m, d, h, min)`, which uses whatever
+  // timezone the server happens to run in and silently mis-imports times
+  // when that differs from WIB (e.g. a UTC production container).
   return new Date(year, month - 1, day, hours, minutes, seconds);
 }
 

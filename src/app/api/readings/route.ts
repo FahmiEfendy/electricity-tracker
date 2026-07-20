@@ -7,13 +7,13 @@ import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 // GET /api/readings — Public: list readings with optional filters
 export async function GET(request: NextRequest) {
   try {
-    await backfillEstimatedReadings();
-
     const { searchParams } = request.nextUrl;
     const month = searchParams.get("month");
     const year = searchParams.get("year");
     const limit = searchParams.get("limit");
     const offset = searchParams.get("offset");
+    const sortParam = searchParams.get("sort");
+    const sortOrder = sortParam === "asc" ? "asc" : "desc";
 
     // Build where clause for optional month/year filtering
     const where: Record<string, unknown> = {};
@@ -60,16 +60,34 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    const pageLimit = limit ? parseInt(limit, 10) : 15;
+    const pageOffset = offset ? parseInt(offset, 10) : 0;
+
     const readings = await prisma.meterReading.findMany({
       where,
-      orderBy: { recordedAt: "desc" },
-      take: limit ? parseInt(limit, 10) : undefined,
-      skip: offset ? parseInt(offset, 10) : undefined,
+      orderBy: { recordedAt: sortOrder },
+      take: pageLimit,
+      skip: pageOffset,
     });
 
     const total = await prisma.meterReading.count({ where });
 
-    return NextResponse.json({ data: readings, total });
+    // Lightweight select for summary, charts, and monthly report
+    const allLightweight = await prisma.meterReading.findMany({
+      select: {
+        id: true,
+        recordedAt: true,
+        kwhUsed: true,
+        costRp: true,
+      },
+      orderBy: { recordedAt: "desc" },
+    });
+
+    return NextResponse.json({
+      data: readings,
+      total,
+      allReadings: allLightweight,
+    });
   } catch (error) {
     console.error("GET /api/readings error:", error);
     return NextResponse.json(
@@ -154,6 +172,8 @@ export async function POST(request: NextRequest) {
     if (nextReading) {
       await recalculateDerivedFields(nextReading.id);
     }
+
+    await backfillEstimatedReadings();
 
     return NextResponse.json({ data: reading }, { status: 201 });
   } catch (error) {

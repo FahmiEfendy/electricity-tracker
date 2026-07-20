@@ -90,38 +90,19 @@ export default function HomePage() {
   const { data: session } = useSession();
   const isAdmin = !!(session?.user);
   const [readings, setReadings] = useState<MeterReading[]>([]);
+  const [allLightweight, setAllLightweight] = useState<MeterReading[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
 
   const fetchReadings = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/readings?limit=1000");
+      const res = await fetch("/api/readings?limit=15&offset=0&sort=desc");
       const data = await res.json();
-      const rawReadings: MeterReading[] = data.data || [];
-
-      // Find the reading with the latest recordedAt timestamp
-      let latestReading: MeterReading | null = null;
-      for (const r of rawReadings) {
-        if (!latestReading || new Date(r.recordedAt) > new Date(latestReading.recordedAt)) {
-          latestReading = r;
-        }
-      }
-
-      // Hide derived fields (hourDiff, kwhUsed, costRp) for the latest reading
-      // as they require a subsequent reading to be calculated correctly.
-      const processedReadings = rawReadings.map((r) => {
-        if (latestReading && r.id === latestReading.id) {
-          return {
-            ...r,
-            hourDiff: null,
-            kwhUsed: null,
-            costRp: null,
-          };
-        }
-        return r;
-      });
-
-      setReadings(processedReadings);
+      setReadings(data.data || []);
+      setTotal(data.total || 0);
+      setAllLightweight(data.allReadings || []);
     } catch (err) {
       console.error("Failed to fetch readings:", err);
     } finally {
@@ -140,23 +121,7 @@ export default function HomePage() {
     };
   }, [fetchReadings]);
 
-  const summary = calculateSummary(readings);
-
-  if (loading) {
-    return (
-      <>
-        <Header onShowImport={() => setShowImport(true)} />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="spinner mx-auto mb-4" style={{ width: "2rem", height: "2rem" }} />
-              <p className="text-text-secondary">Loading data...</p>
-            </div>
-          </div>
-        </main>
-      </>
-    );
-  }
+  const summary = calculateSummary(allLightweight);
 
   return (
     <>
@@ -166,7 +131,7 @@ export default function HomePage() {
         <SummaryCards data={summary} />
 
         {/* Charts */}
-        <UsageChart readings={readings} />
+        <UsageChart readings={allLightweight} />
 
         {/* Admin section: Data Entry */}
         {isAdmin && (
@@ -176,12 +141,15 @@ export default function HomePage() {
         {/* Readings Table */}
         <ReadingsTable
           readings={readings}
+          total={total}
+          allReadings={allLightweight}
           isAdmin={isAdmin}
           onRefresh={fetchReadings}
+          isLoading={loading}
         />
 
         {/* Monthly Report */}
-        <MonthlyReport readings={readings} />
+        <MonthlyReport readings={allLightweight} />
 
         {/* Master Data Settings */}
         <MasterDataPanel isAdmin={isAdmin} />

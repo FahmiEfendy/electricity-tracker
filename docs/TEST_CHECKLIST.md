@@ -91,10 +91,21 @@ Run through this checklist after every deployment or significant code change.
   Navigate to dashboard after login
   **Expected:** Table of meter readings shown (or empty state if no data)
 
-- [ ] **Latest reading hides derived fields**
-  Check the most recent (top) entry in the readings table
-  **Expected:** kWh Used, Cost, and Hour Diff show "—" (not a calculated value)
+- [ ] **Readings table pagination works**
+  If more than 15 readings exist, navigate to page 2 via the pagination controls
+  **Expected:** Next page of readings loads correctly from the server; page indicator updates
 
+- [ ] **Readings table page size selector works**
+  Change the "Show X entries" dropdown to 25
+  **Expected:** 25 rows loaded from the server; pagination recalculates
+
+- [ ] **Month filter shows all months**
+  Open the month filter dropdown in the Readings Table
+  **Expected:** All months with data appear, not just months visible in the current page
+
+- [ ] **Import loading spinner is visible**
+  Open the Import modal, paste CSV data, and click Import
+  **Expected:** Spinner is white and visible on the dark import button while loading
 - [ ] **Create a new reading**
   Add a new meter reading with kWh value and optional notes
   **Expected:** Reading created; the *previous* latest reading now shows calculated fields correctly

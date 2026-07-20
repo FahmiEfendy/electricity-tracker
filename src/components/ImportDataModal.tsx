@@ -71,6 +71,10 @@ export default function ImportDataModal({
 
       setResult(data);
       if (data.imported > 0) {
+        setCsvText("");
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
         onSuccess();
       }
     } catch (err) {
@@ -196,7 +200,13 @@ export default function ImportDataModal({
           >
             {loading ? (
               <span className="flex items-center gap-2">
-                <span className="spinner" />
+                <span
+                  className="spinner"
+                  style={{
+                    borderTopColor: "#ffffff",
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                  }}
+                />
                 Importing...
               </span>
             ) : (
