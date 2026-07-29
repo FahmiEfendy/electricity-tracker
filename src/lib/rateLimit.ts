@@ -6,7 +6,7 @@ interface RateLimitConfig {
 }
 
 const CONFIGS: Record<"auth" | "mutation", RateLimitConfig> = {
-  auth: { maxRequests: 5, windowMs: 60 * 1000 },      // 5 requests / 1 min
+  auth: { maxRequests: 30, windowMs: 60 * 1000 },     // 30 requests / 1 min
   mutation: { maxRequests: 30, windowMs: 60 * 1000 }, // 30 requests / 1 min
 };
 

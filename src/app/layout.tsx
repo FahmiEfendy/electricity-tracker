@@ -31,7 +31,7 @@ export default async function RootLayout({
   return (
     <html lang="id" className="dark">
       <body className={`${inter.variable} ${outfit.variable} antialiased`}>
-        <SessionProvider session={session}>
+        <SessionProvider session={session} refetchOnWindowFocus={false}>
           <div className="relative z-10 min-h-screen">{children}</div>
         </SessionProvider>
       </body>
