@@ -110,10 +110,16 @@ jobs:
           cloudflared access tcp --hostname ssh.fahmiefendy.dev --url localhost:2222 &
           sleep 5
 
-      - name: Deploy on VPS
+      - name: Update .env on VPS
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.ENV_FILE }}" | base64 -d | \
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p 2222 gh-deploy@localhost \
+              "/home/fahmi/homeserver/apps/electricity-tracker/update-env.sh"
+
+      - name: Deploy on VPS
+        run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p 2222 gh-deploy@localhost \
             "/home/fahmi/homeserver/apps/electricity-tracker/deploy.sh electricity-tracker-app"
