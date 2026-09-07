@@ -3,13 +3,14 @@ export const BUY_KWH_UNIT = 11.5;
 
 /**
  * Format a number as Indonesian Rupiah currency
- * @example formatRupiah(22425.01) => "Rp22.425,01"
+ * @example formatRupiah(22425) => "Rp22.425,00"
+ * @example formatRupiah(22425.5) => "Rp22.425,50"
  */
 export function formatRupiah(amount: number): string {
   return (
     "Rp" +
     amount.toLocaleString("id-ID", {
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
   );
