@@ -6,6 +6,7 @@ import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 import { updateReadingSchema, formatZodError } from "@/lib/validations";
 import { verifySameOrigin } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { logApiError } from "@/lib/logApiError";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -119,7 +120,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ data: updated });
   } catch (error) {
-    console.error("PUT /api/readings/[id] error:", error);
+    logApiError("PUT /api/readings/[id]", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -177,7 +178,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ message: "Reading deleted" });
   } catch (error) {
-    console.error("DELETE /api/readings/[id] error:", error);
+    logApiError("DELETE /api/readings/[id]", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

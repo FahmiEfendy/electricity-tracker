@@ -10,6 +10,7 @@ import {
 } from "@/lib/validations";
 import { verifySameOrigin } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { logApiError } from "@/lib/logApiError";
 
 // GET /api/readings — Public: list readings with optional filters
 export async function GET(request: NextRequest) {
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
       allReadings: allLightweight,
     });
   } catch (error) {
-    console.error("GET /api/readings error:", error);
+    logApiError("GET /api/readings", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -173,7 +174,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data: reading }, { status: 201 });
   } catch (error) {
-    console.error("POST /api/readings error:", error);
+    logApiError("POST /api/readings", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

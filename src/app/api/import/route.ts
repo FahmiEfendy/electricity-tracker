@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { backfillEstimatedReadings } from "@/lib/backfillEstimates";
 import { verifySameOrigin } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { logApiError } from "@/lib/logApiError";
 
 /**
  * POST /api/import — Admin only
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ imported, errors });
   } catch (error) {
-    console.error("POST /api/import error:", error);
+    logApiError("POST /api/import", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

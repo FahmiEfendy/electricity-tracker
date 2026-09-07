@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { updateTariffSchema, formatZodError } from "@/lib/validations";
 import { verifySameOrigin } from "@/lib/csrf";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { logApiError } from "@/lib/logApiError";
 
 // GET /api/settings — Public: fetch current tariff
 export async function GET() {
@@ -16,7 +17,7 @@ export async function GET() {
       tariff_per_kwh: tariffSetting?.value ?? null,
     });
   } catch (error) {
-    console.error("GET /api/settings error:", error);
+    logApiError("GET /api/settings", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -68,7 +69,7 @@ export async function PUT(request: NextRequest) {
       tariff_per_kwh: setting.value,
     });
   } catch (error) {
-    console.error("PUT /api/settings error:", error);
+    logApiError("PUT /api/settings", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
