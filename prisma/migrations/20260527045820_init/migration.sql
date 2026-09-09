@@ -19,6 +19,7 @@ CREATE TABLE "meter_readings" (
     "costRp" DOUBLE PRECISION,
     "tariffAtEntry" DOUBLE PRECISION,
     "notes" TEXT,
+    "isEstimated" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -29,4 +30,4 @@ CREATE TABLE "meter_readings" (
 CREATE UNIQUE INDEX "settings_key_key" ON "settings"("key");
 
 -- CreateIndex
-CREATE INDEX "meter_readings_recordedAt_idx" ON "meter_readings"("recordedAt");
+CREATE UNIQUE INDEX "meter_readings_recordedAt_key" ON "meter_readings"("recordedAt");
